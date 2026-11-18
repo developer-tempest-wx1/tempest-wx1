@@ -75,6 +75,8 @@ On 4D pressure-level cubes (`ECMWF IFS 0.25°` `t` `[12, 10, 721, 1440]` and `ER
 pip install tempest-wx1
 ```
 
+> **Supported Platforms:** Prebuilt binary wheels are published for **Linux (`x86_64`)** (Python 3.10–3.13). **Windows is supported via WSL2 (Windows Subsystem for Linux 2)** — install and run `tempest-wx1` inside your WSL2 Linux distribution rather than native Windows.
+
 ### 1. Multi-Variable Dataset (`write_dataset` & `xarray`)
 
 ```python
