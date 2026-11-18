@@ -135,8 +135,13 @@ def from_zarr(
     arr_attrs = dict(getattr(target_array, "attrs", {}))
     ndim = target_array.ndim
 
-    # Infer dimension names
-    if "_ARRAY_DIMENSIONS" in arr_attrs:
+    # Infer dimension names (support both Zarr v3 dimension_names and Zarr v2 _ARRAY_DIMENSIONS)
+    dim_names_v3 = getattr(target_array, "dimension_names", None)
+    if not dim_names_v3 and hasattr(target_array, "metadata"):
+        dim_names_v3 = getattr(target_array.metadata, "dimension_names", None)
+    if dim_names_v3:
+        dims = [str(d) for d in dim_names_v3]
+    elif "_ARRAY_DIMENSIONS" in arr_attrs:
         dims = list(arr_attrs["_ARRAY_DIMENSIONS"])
     else:
         dims = [f"dim_{i}" for i in range(ndim)]
@@ -260,15 +265,25 @@ def to_zarr(
     if fill_val is not None:
         create_kwargs["fill_value"] = fill_val
 
-    # Create array compatible with Zarr 2 and 3
+    # Create array compatible with Zarr 2 and 3 (passing dimension_names for Zarr v3 / xarray.open_zarr)
     if hasattr(root, "create_array"):
-        z_arr = root.create_array(
-            var_name,
-            shape=data.shape,
-            chunks=resolved_chunks,
-            dtype=data.dtype,
-            **create_kwargs,
-        )
+        try:
+            z_arr = root.create_array(
+                var_name,
+                shape=data.shape,
+                chunks=resolved_chunks,
+                dtype=data.dtype,
+                dimension_names=list(dims),
+                **create_kwargs,
+            )
+        except TypeError:
+            z_arr = root.create_array(
+                var_name,
+                shape=data.shape,
+                chunks=resolved_chunks,
+                dtype=data.dtype,
+                **create_kwargs,
+            )
     elif hasattr(root, "create_dataset"):
         z_arr = root.create_dataset(
             var_name,

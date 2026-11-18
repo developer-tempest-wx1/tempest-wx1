@@ -1361,6 +1361,186 @@ impl PyAsyncWriter {
 }
 
 #[pyfunction]
+#[allow(clippy::too_many_arguments)]
+fn write_dataset(
+    py: Python<'_>,
+    path: String,
+    dataset_id: String,
+    dimensions: Vec<(String, u64, String)>,
+    variables: Vec<Bound<'_, PyDict>>,
+    global_attributes: HashMap<String, String>,
+    workers: usize,
+    durability: String,
+) -> PyResult<()> {
+    let path = PathBuf::from(path);
+    let write_durability = match durability.as_str() {
+        "durable" => WriteDurability::Durable,
+        "buffered" => WriteDurability::Buffered,
+        other => {
+            return Err(PyValueError::new_err(format!(
+                "unknown durability '{other}', expected 'durable' or 'buffered'"
+            )))
+        }
+    };
+    let num_workers = workers.max(1);
+    let mut dataset = ScientificDataset::new();
+    for (name, length, role) in dimensions {
+        if name.is_empty() {
+            return Err(PyValueError::new_err("dimension names cannot be empty"));
+        }
+        dataset.dimensions.push(Dimension {
+            name,
+            length,
+            role: dimension_role(&role)?,
+        });
+    }
+
+    let mut next_chunk_id: u64 = 1;
+    let mut all_tile_buffers: Vec<(u64, Vec<u8>, ChunkCodec)> = Vec::new();
+    let mut metadata_attrs = global_attributes;
+
+    for vdict in variables {
+        let raw_name: String = vdict
+            .get_item("name")?
+            .ok_or_else(|| PyValueError::new_err("missing 'name'"))?
+            .extract()?;
+        let name = raw_name
+            .strip_prefix('/')
+            .unwrap_or(raw_name.as_str())
+            .to_owned();
+        if name.is_empty() || name.contains('/') {
+            return Err(PyValueError::new_err(
+                "variable name must be a non-empty root name",
+            ));
+        }
+        let v_dims: Vec<String> = vdict
+            .get_item("dimensions")?
+            .ok_or_else(|| PyValueError::new_err("missing 'dimensions'"))?
+            .extract()?;
+        let shape: Vec<u64> = vdict
+            .get_item("shape")?
+            .ok_or_else(|| PyValueError::new_err("missing 'shape'"))?
+            .extract()?;
+        let chunk_shape: Vec<u64> = vdict
+            .get_item("chunk_shape")?
+            .ok_or_else(|| PyValueError::new_err("missing 'chunk_shape'"))?
+            .extract()?;
+        let dtype_str: String = vdict
+            .get_item("dtype")?
+            .ok_or_else(|| PyValueError::new_err("missing 'dtype'"))?
+            .extract()?;
+        let byte_order_str: String = vdict
+            .get_item("byte_order")?
+            .ok_or_else(|| PyValueError::new_err("missing 'byte_order'"))?
+            .extract()?;
+        let data_bytes: Vec<u8> = vdict
+            .get_item("data")?
+            .ok_or_else(|| PyValueError::new_err("missing 'data'"))?
+            .extract()?;
+        let attrs_map: HashMap<String, String> = vdict
+            .get_item("attributes")?
+            .map(|v| v.extract())
+            .transpose()?
+            .unwrap_or_default();
+        let codec_str: String = vdict
+            .get_item("codec")?
+            .map(|v| v.extract())
+            .transpose()?
+            .unwrap_or_else(|| "zstd_shuffle".to_owned());
+
+        let data_type = parse_dtype(&dtype_str)?;
+        let payload_order = parse_byte_order(&byte_order_str)?;
+        let chunk_codec = match codec_str.as_str() {
+            "raw" => ChunkCodec::Raw,
+            "lz4" => ChunkCodec::Lz4,
+            "zstd" => ChunkCodec::Zstandard,
+            "zstd_shuffle" | "zstd_byteshuffle" | "byteshuffle" | "shuffle" => {
+                match data_type.element_size() {
+                    4 => ChunkCodec::ZstdByteShuffle4,
+                    8 => ChunkCodec::ZstdByteShuffle8,
+                    2 => ChunkCodec::ZstdByteShuffle2,
+                    _ => ChunkCodec::Zstandard,
+                }
+            }
+            other => return Err(PyValueError::new_err(format!("unknown codec: {other}"))),
+        };
+
+        let mut refs = chunk_references(&shape, &chunk_shape)?;
+        for chunk in &mut refs {
+            chunk.chunk_id = next_chunk_id;
+            next_chunk_id += 1;
+            let mut reader = ArrayTileReader::new(
+                &data_bytes,
+                &shape,
+                &chunk.origin,
+                &chunk.shape,
+                data_type.element_size(),
+            )?;
+            let buf = reader.extract_vec().map_err(io_error)?;
+            all_tile_buffers.push((chunk.chunk_id, buf, chunk_codec));
+        }
+
+        let mut variable_attributes: std::collections::BTreeMap<String, AttributeValue> = attrs_map
+            .into_iter()
+            .map(|(k, v)| (k, AttributeValue::Text(v)))
+            .collect();
+        variable_attributes
+            .entry("wx1:lossy".to_owned())
+            .or_insert_with(|| AttributeValue::Text("false".to_owned()));
+        variable_attributes
+            .entry("wx1:profile".to_owned())
+            .or_insert_with(|| AttributeValue::Text("restart".to_owned()));
+
+        for (k, v) in &variable_attributes {
+            if let AttributeValue::Text(s) = v {
+                metadata_attrs.entry(k.clone()).or_insert_with(|| s.clone());
+            }
+        }
+
+        dataset.variables.push(Variable {
+            name,
+            group: "/".to_owned(),
+            data_type,
+            byte_order: payload_order,
+            dimensions: v_dims,
+            chunk_shape,
+            fill_value: None,
+            missing_value: None,
+            attributes: variable_attributes,
+            chunks: refs,
+            grid_mapping: None,
+        });
+    }
+
+    dataset.validate().map_err(format_error)?;
+    let mut metadata = Metadata::new(dataset_id).with_scientific_model(dataset);
+    for (k, v) in metadata_attrs {
+        metadata.attributes.insert(k, v);
+    }
+
+    py.allow_threads(|| {
+        let encoded_inputs: Vec<EncodedChunkInput<'_>> = all_tile_buffers
+            .iter()
+            .map(|(id, buf, codec)| EncodedChunkInput {
+                id: *id,
+                data: buf.as_slice(),
+                codec: *codec,
+            })
+            .collect();
+        let staged = stage_chunks_parallel(&encoded_inputs, num_workers)?;
+        write_staged_generation_container_atomic(
+            &path,
+            &metadata,
+            &staged,
+            &[],
+            HeaderByteOrder::LittleEndian,
+            write_durability,
+        )
+    })
+    .map_err(format_error)
+}
+
+#[pyfunction]
 fn unit_dimension(unit: String) -> Option<&'static str> {
     wx1_registry::unit_dimension(&unit)
 }
@@ -1390,6 +1570,7 @@ fn _core(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<PyAsyncWriter>()?;
     module.add_function(wrap_pyfunction!(open_file, module)?)?;
     module.add_function(wrap_pyfunction!(write_array, module)?)?;
+    module.add_function(wrap_pyfunction!(write_dataset, module)?)?;
     module.add_function(wrap_pyfunction!(unit_dimension, module)?)?;
     module.add_function(wrap_pyfunction!(unit_conversion_factor, module)?)?;
     module.add_function(wrap_pyfunction!(resolve_cf_standard_name, module)?)?;

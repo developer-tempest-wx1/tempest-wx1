@@ -134,11 +134,15 @@ class Wx1BackendEntrypoint(BackendEntrypoint):
             item_for_backend["numpy_dtype"] = dtype.str
             backend_array = Wx1BackendArray(file, item_for_backend)
             lazy_data = LazilyIndexedArray(backend_array)
-            variables[variable_path] = xr.Variable(
+            var_obj = xr.Variable(
                 tuple(item["dimensions"]),
                 lazy_data,
                 attrs=dict(item["attributes"]),
             )
+            clean_name = item.get("name") or variable_path.lstrip("/")
+            if drop_variables and clean_name in drop_variables:
+                continue
+            variables[clean_name or variable_path] = var_obj
 
         dataset = xr.Dataset(
             data_vars=variables,

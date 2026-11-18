@@ -39,7 +39,11 @@ except ImportError:
 else:
     _CORE_IMPORT_ERROR = None
 
-__version__ = "0.1.0"
+try:
+    from importlib.metadata import version as _get_version
+    __version__ = _get_version("tempest-wx1")
+except Exception:
+    __version__ = "0.1.3"
 
 __all__ = [
     "__version__",
@@ -48,6 +52,8 @@ __all__ = [
     "open_file",
     "open_dataset",
     "write_array",
+    "write_dataset",
+    "write_variables",
     "from_grib",
     "to_grib",
     "from_netcdf",
@@ -148,7 +154,7 @@ def _to_host_numpy(data):
 
 
 def _place_on_device(arr, to_device: str | None):
-    """Transfers host NumPy array to requested device (e.g. 'jax', 'cpu') (ADR 0033)."""
+    """Transfers host NumPy array to requested device (e.g. 'jax', 'cpu', 'torch') (ADR 0033)."""
     if to_device is None or to_device == "cpu" or to_device == "numpy":
         return arr
     if to_device == "jax":
@@ -160,10 +166,30 @@ def _place_on_device(arr, to_device: str | None):
     if to_device == "torch":
         try:
             import torch
-            return torch.as_tensor(arr)
+            w_arr = arr.copy() if not arr.flags.writeable else arr
+            t = torch.from_numpy(w_arr)
+            return t.cuda() if torch.cuda.is_available() else t
         except ImportError as exc:
             raise ImportError("to_device='torch' requires the 'torch' package") from exc
     raise ValueError(f"Unsupported to_device '{to_device}'; expected 'cpu', 'jax', or 'torch'")
+
+
+_SLASH_TOKEN = "__wx1_slash__"
+
+
+def _encode_var_path(variable_path: str) -> tuple[str, str | None]:
+    clean = variable_path.lstrip("/")
+    if "/" in clean:
+        return "/" + clean.replace("/", _SLASH_TOKEN), "/" + clean
+    return "/" + clean, None
+
+
+def _decode_var_path(native_path: str, attrs: Mapping[str, str]) -> str:
+    if "wx1:__logical_path__" in attrs:
+        return attrs["wx1:__logical_path__"]
+    if _SLASH_TOKEN in native_path:
+        return "/" + native_path.lstrip("/").replace(_SLASH_TOKEN, "/")
+    return native_path
 
 
 # ==============================================================================
@@ -172,63 +198,162 @@ def _place_on_device(arr, to_device: str | None):
 #          without full decompression overhead.
 # ==============================================================================
 
+def _reconstruct_grib_packed(
+    raw_int,
+    s_info: Mapping[str, Any],
+    start: Sequence[int],
+    count: Sequence[int],
+    full_shape: Sequence[int],
+    out_dtype: str | None = None,
+):
+    np = _numpy()
+    target_dt = np.float64 if (out_dtype or s_info.get("out_dtype", "float32")) in ("float64", "f8") else np.float32
+    lead_shape = list(full_shape[:-2]) + [1, 1]
+    R = np.asarray(s_info["R"], dtype=np.float64).reshape(lead_shape)
+    scale = (2.0 ** np.asarray(s_info["E"], dtype=np.float64)).reshape(lead_shape)
+    D_arr = np.asarray(s_info["D"], dtype=np.float64)
+    dec = (10.0 ** (-D_arr)).reshape(lead_shape)
+
+    lead_slices = tuple(slice(s, s + c) for s, c in zip(start[:-2], count[:-2]))
+    R_sub = R[lead_slices]
+    scale_sub = scale[lead_slices]
+    dec_sub = dec[lead_slices]
+
+    pred = s_info.get("pred", "2d")
+    if pred == "2d":
+        cy = int(s_info.get("cy", full_shape[-2]))
+        cx = int(s_info.get("cx", full_shape[-1]))
+        zz_u16 = raw_int.astype(np.uint16, copy=False)
+        d_u16 = (zz_u16 >> np.uint16(1)) ^ (np.uint16(0) - (zz_u16 & np.uint16(1)))
+        d_u16[..., ::cy, ::cx] = zz_u16[..., ::cy, ::cx]
+        height, width = d_u16.shape[-2], d_u16.shape[-1]
+        for by in range(0, height, cy):
+            by1 = min(height, by + cy)
+            np.cumsum(d_u16[..., by:by1, :], axis=-2, dtype=np.uint16, out=d_u16[..., by:by1, :])
+        for bx in range(0, width, cx):
+            bx1 = min(width, bx + cx)
+            np.cumsum(d_u16[..., :, bx:bx1], axis=-1, dtype=np.uint16, out=d_u16[..., :, bx:bx1])
+        X = d_u16
+    elif pred in ("1d", True):
+        cx = int(s_info.get("cx", full_shape[-1]))
+        zz_u16 = raw_int.astype(np.uint16, copy=False)
+        d_u16 = (zz_u16 >> np.uint16(1)) ^ (np.uint16(0) - (zz_u16 & np.uint16(1)))
+        d_u16[..., ::cx] = zz_u16[..., ::cx]
+        width = d_u16.shape[-1]
+        for bx in range(0, width, cx):
+            bx1 = min(width, bx + cx)
+            np.cumsum(d_u16[..., bx:bx1], axis=-1, dtype=np.uint16, out=d_u16[..., bx:bx1])
+        X = d_u16
+    else:
+        X = raw_int.astype(np.uint16, copy=False)
+
+    if np.all(D_arr == 0):
+        out64 = R_sub + X * scale_sub
+    else:
+        out64 = (R_sub + X * scale_sub) * dec_sub
+    if s_info.get("has_nan"):
+        out64 = np.where(X == 65535, np.nan, out64)
+    return out64 if target_dt == np.float64 else out64.astype(np.float32)
+
+
 class Wx1File:
     """Python convenience wrapper around a fully validated native WX-1 snapshot."""
 
     def __init__(self, native_file):
         self._native = native_file
+        self._closed = False
+
+    def _check_open(self) -> None:
+        if getattr(self, "_closed", False):
+            raise ValueError("I/O operation on closed Wx1File")
+
+    def _resolve_native_var(self, variable_path: str) -> dict[str, Any]:
+        self._check_open()
+        norm_req = "/" + variable_path.lstrip("/")
+        enc_req, _ = _encode_var_path(variable_path)
+        for item in self._native.variables():
+            raw_attrs = dict(item.get("attributes", {}))
+            logical_p = _decode_var_path(item["path"], raw_attrs)
+            if item["path"] in (variable_path, norm_req, enc_req) or logical_p in (variable_path, norm_req):
+                return item
+        raise KeyError(variable_path)
 
     @property
     def dataset_id(self) -> str:
+        self._check_open()
         return self._native.dataset_id
 
     @property
     def generation(self) -> int:
+        self._check_open()
         return self._native.generation
 
     @property
     def attributes(self) -> dict[str, str]:
-        attrs = dict(self._native.attributes())
+        self._check_open()
+        attrs = {k: v for k, v in dict(self._native.attributes()).items() if not k.startswith("wx1:__")}
         if not attrs:
             for v in self.variables:
                 v_attrs = v.get("attributes", {})
                 for k, val in v_attrs.items():
-                    attrs[k] = str(val)
+                    if not k.startswith("wx1:__"):
+                        attrs[k] = str(val)
         return attrs
 
     @property
     def dimensions(self) -> dict[str, tuple[int, str]]:
+        self._check_open()
         return {name: (int(length), role) for name, length, role in self._native.dimensions()}
 
     @property
     def variables(self) -> list[dict[str, Any]]:
-        return list(self._native.variables())
+        self._check_open()
+        import json as _json
+        out = []
+        for item in self._native.variables():
+            d = dict(item)
+            raw_attrs = dict(d.get("attributes", {}))
+            logical_path = _decode_var_path(d["path"], raw_attrs)
+            d["path"] = logical_path
+            d["name"] = logical_path.lstrip("/")
+            if "wx1:__logical_dtype__" in raw_attrs:
+                d["dtype"] = raw_attrs["wx1:__logical_dtype__"]
+            if "wx1:__zero_shape__" in raw_attrs:
+                d["shape"] = _json.loads(raw_attrs["wx1:__zero_shape__"])
+            d["attributes"] = {k: v for k, v in raw_attrs.items() if not k.startswith("wx1:__")}
+            out.append(d)
+        return out
 
     @property
     def coordinate_variables(self) -> tuple[str, ...]:
+        self._check_open()
         return tuple(self._native.coordinate_variables())
 
     @property
     def grid_topologies(self) -> dict[str, dict[str, Any]]:
+        self._check_open()
         if hasattr(self._native, "grid_topologies"):
             return dict(self._native.grid_topologies())
         return {}
 
     @property
     def provenance(self) -> list[dict[str, Any]]:
+        self._check_open()
         if hasattr(self._native, "provenance"):
             return list(self._native.provenance())
         return []
 
     def plan_array_slice(self, variable_path: str, start: Sequence[int], count: Sequence[int]):
+        item = self._resolve_native_var(variable_path)
         chunk_ids, output_bytes = self._native.plan_array_slice(
-            variable_path, [int(value) for value in start], [int(value) for value in count]
+            item["path"], [int(value) for value in start], [int(value) for value in count]
         )
         return {"chunk_ids": tuple(chunk_ids), "output_bytes": int(output_bytes)}
 
     def plan_tile_slice(self, variable_path: str, tile_index: int, *, include_halos: bool = False):
+        item = self._resolve_native_var(variable_path)
         chunk_ids, output_bytes, start, shape = self._native.plan_tile_slice(
-            variable_path, int(tile_index), bool(include_halos)
+            item["path"], int(tile_index), bool(include_halos)
         )
         return {
             "chunk_ids": tuple(chunk_ids),
@@ -246,15 +371,17 @@ class Wx1File:
         copy: bool = False,
     ):
         np = _numpy()
+        item = self._resolve_native_var(variable_path)
         raw, dtype_name, byte_order, shape = self._native.read_tile_slice(
-            variable_path, int(tile_index), bool(include_halos)
+            item["path"], int(tile_index), bool(include_halos)
         )
         result = np.frombuffer(raw, dtype=_dtype_for_numpy(dtype_name, byte_order)).reshape(tuple(shape))
         return result.copy() if copy else result
 
     def read_raw_slice(self, variable_path: str, start: Sequence[int], count: Sequence[int]):
+        item = self._resolve_native_var(variable_path)
         raw, dtype_name, byte_order, shape = self._native.read_array_slice(
-            variable_path, [int(value) for value in start], [int(value) for value in count]
+            item["path"], [int(value) for value in start], [int(value) for value in count]
         )
         return raw, dtype_name, byte_order, tuple(shape)
 
@@ -266,12 +393,58 @@ class Wx1File:
         *,
         copy: bool = False,
         to_device: str | None = None,
+        dtype: str | None = None,
     ):
         np = _numpy()
-        raw, dtype_name, byte_order, shape = self.read_raw_slice(variable_path, start, count)
+        item = self._resolve_native_var(variable_path)
+        raw_attrs = dict(item.get("attributes", {}))
+        if "wx1:__grib_scale__" in raw_attrs:
+            import json as _json
+            full_shape = list(item["shape"])
+            s_info = _json.loads(raw_attrs["wx1:__grib_scale__"])
+            pred = s_info.get("pred", "2d")
+            if pred == "2d":
+                cy = int(s_info.get("cy", full_shape[-2]))
+                cx = int(s_info.get("cx", full_shape[-1]))
+                H, W = full_shape[-2], full_shape[-1]
+                y0, yc = int(start[-2]), int(count[-2])
+                x0, xc = int(start[-1]), int(count[-1])
+                ay0 = (y0 // cy) * cy
+                ay1 = min(H, ((y0 + yc - 1) // cy + 1) * cy)
+                ax0 = (x0 // cx) * cx
+                ax1 = min(W, ((x0 + xc - 1) // cx + 1) * cx)
+                adj_start = [int(v) for v in start[:-2]] + [ay0, ax0]
+                adj_count = [int(v) for v in count[:-2]] + [ay1 - ay0, ax1 - ax0]
+                raw, dtype_name, byte_order, shape = self.read_raw_slice(item["path"], adj_start, adj_count)
+                raw_int = np.frombuffer(raw, dtype=_dtype_for_numpy(dtype_name, byte_order)).reshape(shape)
+                rec = _reconstruct_grib_packed(raw_int, s_info, adj_start, adj_count, full_shape, out_dtype=dtype)
+                arr = np.ascontiguousarray(rec[..., (y0 - ay0) : (y0 - ay0 + yc), (x0 - ax0) : (x0 - ax0 + xc)])
+            elif pred in ("1d", True):
+                cx = int(s_info.get("cx", full_shape[-1]))
+                W = full_shape[-1]
+                x0, xc = int(start[-1]), int(count[-1])
+                ax0 = (x0 // cx) * cx
+                ax1 = min(W, ((x0 + xc - 1) // cx + 1) * cx)
+                adj_start = [int(v) for v in start[:-1]] + [ax0]
+                adj_count = [int(v) for v in count[:-1]] + [ax1 - ax0]
+                raw, dtype_name, byte_order, shape = self.read_raw_slice(item["path"], adj_start, adj_count)
+                raw_int = np.frombuffer(raw, dtype=_dtype_for_numpy(dtype_name, byte_order)).reshape(shape)
+                rec = _reconstruct_grib_packed(raw_int, s_info, adj_start, adj_count, full_shape, out_dtype=dtype)
+                arr = np.ascontiguousarray(rec[..., (x0 - ax0) : (x0 - ax0 + xc)])
+            else:
+                raw, dtype_name, byte_order, shape = self.read_raw_slice(item["path"], start, count)
+                raw_int = np.frombuffer(raw, dtype=_dtype_for_numpy(dtype_name, byte_order)).reshape(shape)
+                arr = _reconstruct_grib_packed(raw_int, s_info, start, count, full_shape, out_dtype=dtype)
+            return _place_on_device(arr, to_device)
+        raw, dtype_name, byte_order, shape = self.read_raw_slice(item["path"], start, count)
         result = np.frombuffer(raw, dtype=_dtype_for_numpy(dtype_name, byte_order)).reshape(shape)
-        arr = result.copy() if copy else result
-        return _place_on_device(arr, to_device)
+        if "wx1:__logical_dtype__" in raw_attrs:
+            result = result.view(np.dtype(raw_attrs["wx1:__logical_dtype__"]))
+        if dtype is not None:
+            result = result.astype(np.dtype(dtype), copy=copy)
+        else:
+            result = result.copy() if copy else result
+        return _place_on_device(result, to_device)
 
     def read_points(
         self,
@@ -282,22 +455,30 @@ class Wx1File:
     ):
         """Read discrete multidimensional point coordinates with chunk-grouped batching (R8/R4)."""
         np = _numpy()
+        item = self._resolve_native_var(variable_path)
+        raw_attrs = dict(item.get("attributes", {}))
         pts = [[int(coord) for coord in pt] for pt in points]
-        raw, dtype_name, byte_order, shape = self._native.read_point_coordinates(variable_path, pts)
+        raw, dtype_name, byte_order, shape = self._native.read_point_coordinates(item["path"], pts)
         result = np.frombuffer(raw, dtype=_dtype_for_numpy(dtype_name, byte_order)).reshape(tuple(shape))
+        if "wx1:__logical_dtype__" in raw_attrs:
+            result = result.view(np.dtype(raw_attrs["wx1:__logical_dtype__"]))
         return result.copy() if copy else result
 
-    def read_array(self, variable_path: str, *, copy: bool = False, to_device: str | None = None):
-        clean = variable_path.lstrip("/")
-        variable = next((item for item in self.variables if item["path"] == variable_path or item["path"].lstrip("/") == clean), None)
-        if variable is None:
-            raise KeyError(variable_path)
-        actual_path = variable["path"]
-        shape = list(variable["shape"])
+    def read_array(self, variable_path: str, *, copy: bool = False, to_device: str | None = None, dtype: str | None = None):
+        item = self._resolve_native_var(variable_path)
+        raw_attrs = dict(item.get("attributes", {}))
         np = _numpy()
-        dtype = _dtype_for_numpy(variable["dtype"], variable["byte_order"])
-        total_bytes = int(np.prod(shape)) * dtype.itemsize if shape else dtype.itemsize
-        max_slice_bytes = 64 * 1024 * 1024
+        if "wx1:__zero_shape__" in raw_attrs:
+            import json as _json
+            zshape = _json.loads(raw_attrs["wx1:__zero_shape__"])
+            ldtype = np.dtype(dtype or raw_attrs.get("wx1:__logical_dtype__", _dtype_for_numpy(item["dtype"], item["byte_order"])))
+            return _place_on_device(np.empty(zshape, dtype=ldtype), to_device)
+        actual_path = item["path"]
+        shape = list(item["shape"])
+        native_dt = _dtype_for_numpy(item["dtype"], item["byte_order"])
+        total_bytes = int(np.prod(shape)) * native_dt.itemsize if shape else native_dt.itemsize
+        # Rust wx1-format enforces MAX_ARRAY_READ_BYTES = 64 MiB per slice call; keep well below limit
+        max_slice_bytes = 32 * 1024 * 1024
         if total_bytes <= max_slice_bytes or len(shape) == 0:
             return self.read_array_slice(
                 actual_path,
@@ -305,11 +486,13 @@ class Wx1File:
                 shape,
                 copy=copy,
                 to_device=to_device,
+                dtype=dtype,
             )
-        # Bounded batched read along axis 0 when total volume > 64 MiB
-        slice_bytes = int(np.prod(shape[1:])) * dtype.itemsize
+        # Bounded batched read along axis 0 when total volume > 1 GiB
+        slice_bytes = int(np.prod(shape[1:])) * native_dt.itemsize
         step = max(1, max_slice_bytes // max(1, slice_bytes))
-        out = np.empty(shape, dtype=dtype)
+        out_dt = np.dtype(dtype or raw_attrs.get("wx1:__logical_dtype__", native_dt))
+        out = np.empty(shape, dtype=out_dt)
         for start0 in range(0, shape[0], step):
             cnt0 = min(step, shape[0] - start0)
             out[start0:start0 + cnt0] = self.read_array_slice(
@@ -317,15 +500,20 @@ class Wx1File:
                 [start0] + [0] * (len(shape) - 1),
                 [cnt0] + shape[1:],
                 copy=False,
+                dtype=dtype,
             )
+        if "wx1:__logical_dtype__" in raw_attrs and "wx1:__grib_scale__" not in raw_attrs and dtype is None:
+            out = out.view(np.dtype(raw_attrs["wx1:__logical_dtype__"]))
         return _place_on_device(out, to_device)
 
     def close(self) -> None:
         # The native snapshot retains metadata/descriptors only; every read opens its own file.
+        self._closed = True
         self._native.close()
 
     def validate(self) -> None:
         """Perform exhaustive full verification of all chunk checksums and generation hashes."""
+        self._check_open()
         self._native.validate()
 
     def __enter__(self):
@@ -395,6 +583,29 @@ def write_array(
         raise ValueError("lossy quantization is strictly forbidden in restart profile")
     np = _numpy()
     array = _to_host_numpy(data)
+    attrs = {str(key): str(value) for key, value in (attributes or {}).items()}
+    enc_var_path, logical_path = _encode_var_path(str(variable_path))
+    if logical_path is not None:
+        attrs["wx1:__logical_path__"] = logical_path
+
+    # Support float16 and complex64 via bit-preserving unsigned integer carrier
+    carrier_view = {
+        ("f", 2): (np.uint16, "float16"),
+        ("c", 8): (np.uint64, "complex64"),
+    }
+    if (array.dtype.kind, array.dtype.itemsize) in carrier_view:
+        c_dtype, l_name = carrier_view[(array.dtype.kind, array.dtype.itemsize)]
+        attrs["wx1:__logical_dtype__"] = l_name
+        array = np.ascontiguousarray(array).view(c_dtype)
+
+    if 0 in array.shape:
+        import json as _json
+        attrs["wx1:__zero_shape__"] = _json.dumps([int(s) for s in array.shape])
+        safe_shape = [max(1, int(s)) for s in array.shape]
+        array = np.zeros(safe_shape, dtype=array.dtype)
+        if chunk_shape is None:
+            chunk_shape = safe_shape
+
     dtype_names = {
         ("u", 1): "uint8", ("i", 1): "int8",
         ("u", 2): "uint16", ("i", 2): "int16",
@@ -415,11 +626,10 @@ def write_array(
         byte_order_name = "little" if byte_order == "<" else "big"
     chunk = tuple(int(value) for value in (chunk_shape or array.shape))
     roles = list(dimension_roles) if dimension_roles is not None else ["other"] * array.ndim
-    attrs = {str(key): str(value) for key, value in (attributes or {}).items()}
     _require_core().write_array(
         str(Path(path)),
         str(dataset_id),
-        str(variable_path),
+        enc_var_path,
         [str(value) for value in dimensions],
         [int(value) for value in array.shape],
         list(chunk),
@@ -441,6 +651,205 @@ def write_array(
         str(stagger_vertical) if stagger_vertical is not None else None,
         str(tile_dimension) if tile_dimension is not None else None,
     )
+
+
+def write_dataset(
+    path: str | Path,
+    variables: Any,
+    *,
+    dataset_id: str = "wx1_dataset",
+    dimensions: Mapping[str, Any] | Sequence[str] | None = None,
+    variable_dimensions: Mapping[str, Sequence[str]] | None = None,
+    chunk_shapes: Mapping[str, Sequence[int]] | Sequence[int] | None = None,
+    dimension_roles: Mapping[str, str] | None = None,
+    attributes: Mapping[str, Any] | None = None,
+    variable_attributes: Mapping[str, Mapping[str, Any]] | None = None,
+    codec: str = "zstd",
+    workers: int = 4,
+    durability: str = "durable",
+) -> None:
+    """Writes multiple scientific variables into a single atomic WX-1 container.
+
+    Parameters
+    ----------
+    path : str or Path
+        Destination .wx1 file path.
+    variables : Mapping or xarray.Dataset
+        Mapping of variable names to arrays (NumPy, JAX) or dict specs,
+        or an xarray Dataset containing multiple data variables.
+    dataset_id : str, default "wx1_dataset"
+        Dataset identifier stored in container metadata.
+    dimensions : Mapping[str, int] or Sequence[str] or None
+        Explicit dimension names or mapping of dimension name to length.
+    chunk_shapes : Mapping[str, Sequence[int]] or Sequence[int] or None
+        Per-variable chunk shapes or default chunk shape across variables.
+    dimension_roles : Mapping[str, str] or None
+        Role mapping for dimensions: 'time', 'latitude', 'longitude', 'vertical', etc.
+    attributes : Mapping or None
+        Dataset-level and/or per-variable metadata attributes.
+    codec : str, default "zstd"
+        Default compression codec ("zstd", "zstd_shuffle", "lz4", "raw").
+    workers : int, default 4
+        Number of parallel chunk-staging threads.
+    durability : str, default "durable"
+        "durable" (fsync before return) or "buffered".
+    """
+    np = _numpy()
+    dtype_names = {
+        ("u", 1): "uint8", ("i", 1): "int8",
+        ("u", 2): "uint16", ("i", 2): "int16",
+        ("u", 4): "uint32", ("i", 4): "int32",
+        ("u", 8): "uint64", ("i", 8): "int64",
+        ("f", 4): "float32", ("f", 8): "float64",
+        ("b", 1): "bool",
+    }
+
+    var_items = []
+    dim_lengths: dict[str, int] = {}
+    global_attrs: dict[str, str] = {}
+
+    is_xr = False
+    if "xarray" in sys.modules:
+        import xarray as xr
+        if isinstance(variables, xr.Dataset):
+            is_xr = True
+            for d, length in variables.sizes.items():
+                dim_lengths[str(d)] = int(length)
+            for k, v in variables.attrs.items():
+                global_attrs[str(k)] = str(v)
+            for var_name, da in variables.data_vars.items():
+                host_data = _to_host_numpy(da.values)
+                v_dims = [str(d) for d in da.dims]
+                v_attrs = {str(k): str(v) for k, v in da.attrs.items()}
+                v_chunks = None
+                if isinstance(chunk_shapes, Mapping):
+                    v_chunks = chunk_shapes.get(str(var_name))
+                elif isinstance(chunk_shapes, Sequence):
+                    v_chunks = chunk_shapes
+                elif hasattr(da, "encoding") and "chunks" in da.encoding:
+                    v_chunks = da.encoding["chunks"]
+                var_items.append((str(var_name), host_data, v_dims, v_chunks, v_attrs, codec))
+
+    if not is_xr:
+        if not isinstance(variables, Mapping):
+            raise TypeError("variables must be an xarray.Dataset or a Mapping of variable names to arrays")
+        for var_name, var_val in variables.items():
+            if isinstance(var_val, Mapping) and "data" in var_val:
+                host_data = _to_host_numpy(var_val["data"])
+                v_dims = var_val.get("dimensions")
+                v_attrs = {str(k): str(v) for k, v in var_val.get("attributes", {}).items()}
+                v_codec = str(var_val.get("codec", codec))
+                v_chunks = var_val.get("chunk_shape")
+            else:
+                host_data = _to_host_numpy(var_val)
+                v_dims = None
+                if isinstance(variable_dimensions, Mapping) and var_name in variable_dimensions:
+                    v_dims = variable_dimensions[var_name]
+                elif isinstance(dimensions, Mapping):
+                    cand = dimensions.get(var_name)
+                    if isinstance(cand, Sequence) and not isinstance(cand, (str, bytes)):
+                        v_dims = cand
+                    elif all(isinstance(x, (int, np.integer)) for x in dimensions.values()):
+                        if len(dimensions) == host_data.ndim and [int(x) for x in dimensions.values()] == list(host_data.shape):
+                            v_dims = list(dimensions.keys())
+                        else:
+                            # Match by dimension length in order
+                            used = set()
+                            matched = []
+                            for ax_len in host_data.shape:
+                                found = next((dn for dn, dl in dimensions.items() if int(dl) == ax_len and dn not in used), None)
+                                if found is not None:
+                                    used.add(found)
+                                    matched.append(found)
+                            if len(matched) == host_data.ndim:
+                                v_dims = matched
+                elif isinstance(dimensions, Sequence) and not isinstance(dimensions, (str, bytes)):
+                    v_dims = dimensions
+                v_attrs = {}
+                if isinstance(attributes, Mapping) and isinstance(attributes.get(var_name), Mapping):
+                    v_attrs.update({str(k): str(v) for k, v in attributes[var_name].items()})
+                if isinstance(variable_attributes, Mapping) and isinstance(variable_attributes.get(var_name), Mapping):
+                    v_attrs.update({str(k): str(v) for k, v in variable_attributes[var_name].items()})
+                v_codec = codec
+                v_chunks = chunk_shapes.get(var_name) if isinstance(chunk_shapes, Mapping) else chunk_shapes
+
+            if v_dims is None:
+                v_dims = [f"dim_{i}" for i in range(host_data.ndim)]
+            else:
+                v_dims = [str(d) for d in v_dims]
+            var_items.append((str(var_name), host_data, v_dims, v_chunks, v_attrs, v_codec))
+
+    if attributes:
+        for k, v in attributes.items():
+            if not isinstance(v, Mapping):
+                global_attrs[str(k)] = str(v)
+
+    for var_name, host_data, v_dims, _, _, _ in var_items:
+        if len(v_dims) != host_data.ndim:
+            raise ValueError(f"Variable '{var_name}' declared {len(v_dims)} dimensions but array has ndim {host_data.ndim}")
+        for d_name, d_len in zip(v_dims, host_data.shape):
+            if d_name in dim_lengths:
+                if dim_lengths[d_name] != d_len:
+                    raise ValueError(f"Dimension '{d_name}' length conflict: {dim_lengths[d_name]} vs {d_len} in '{var_name}'")
+            else:
+                dim_lengths[d_name] = int(d_len)
+
+    roles_map = dict(dimension_roles or {})
+    dim_tuples = []
+    for d_name, d_len in dim_lengths.items():
+        role = roles_map.get(d_name)
+        if role is None:
+            lower = d_name.lower()
+            if "time" in lower or lower in ("t", "step"):
+                role = "time"
+            elif "lat" in lower or lower in ("y", "nj"):
+                role = "latitude"
+            elif "lon" in lower or lower in ("x", "ni"):
+                role = "longitude"
+            elif "lev" in lower or "pres" in lower or lower in ("z", "isobaric"):
+                role = "vertical"
+            else:
+                role = "other"
+        dim_tuples.append((d_name, int(d_len), role))
+
+    var_dicts = []
+    for var_name, host_data, v_dims, v_chunks, v_attrs, v_codec in var_items:
+        try:
+            native_dtype = dtype_names[(host_data.dtype.kind, host_data.dtype.itemsize)]
+        except KeyError as exc:
+            raise TypeError(f"Unsupported WX-1 NumPy dtype: {host_data.dtype} in variable '{var_name}'") from exc
+        host_data = np.ascontiguousarray(host_data)
+        byte_order = host_data.dtype.byteorder
+        if byte_order in ("=", "|"):
+            byte_order_name = sys.byteorder if host_data.dtype.itemsize > 1 else "little"
+        else:
+            byte_order_name = "little" if byte_order == "<" else "big"
+        chunk_shape = [int(s) for s in (v_chunks or host_data.shape)]
+
+        var_dicts.append({
+            "name": var_name,
+            "dimensions": v_dims,
+            "shape": [int(s) for s in host_data.shape],
+            "chunk_shape": chunk_shape,
+            "dtype": native_dtype,
+            "byte_order": byte_order_name,
+            "data": host_data.tobytes(order="C"),
+            "attributes": v_attrs,
+            "codec": v_codec,
+        })
+
+    _require_core().write_dataset(
+        str(Path(path)),
+        str(dataset_id),
+        dim_tuples,
+        var_dicts,
+        global_attrs,
+        int(workers),
+        str(durability),
+    )
+
+
+write_variables = write_dataset
 
 
 # ==============================================================================
@@ -556,10 +965,10 @@ def write_restart_checkpoint(
             dims = dimensions if isinstance(dimensions, Sequence) and not isinstance(dimensions, (str, bytes)) else [f"dim_{i}" for i in range(host_arr.ndim)]
             write_array(
                 path,
+                host_arr,
                 dataset_id=dataset_id,
-                variable_path=var_name,
+                variable_path="/" + str(var_name).lstrip("/"),
                 dimensions=dims,
-                array=host_arr,
                 profile="restart",
                 codec=codec,
                 durability=durability,
@@ -569,11 +978,12 @@ def write_restart_checkpoint(
         else:
             path.mkdir(parents=True, exist_ok=True)
             import json
+            serializable_prng = prng_state.tolist() if hasattr(prng_state, "tolist") else prng_state
             manifest = {
                 "dataset_id": dataset_id,
                 "iteration": iteration,
                 "sim_time_seconds": sim_time_seconds,
-                "prng_state": prng_state,
+                "prng_state": serializable_prng,
                 "shard_info": dict(shard_info) if shard_info else None,
                 "variables": list(state.keys()),
             }

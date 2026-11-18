@@ -1,80 +1,73 @@
 # WX-1: Open Scientific & Meteorological Container Format
 
-[![Crates.io](https://img.shields.io/badge/crates.io-v1.0.0--rc1-orange.svg)](https://crates.io)
-[![Python](https://img.shields.io/badge/python-3.10%20%7C%203.11%20%7C%203.12%20%7C%203.13-blue.svg)](https://pypi.org)
+[![PyPI](https://img.shields.io/badge/pypi-v0.1.3-blue.svg)](https://pypi.org/project/tempest-wx1/)
+[![Python](https://img.shields.io/badge/python-3.10%20%7C%203.11%20%7C%203.12%20%7C%203.13-blue.svg)](https://pypi.org/project/tempest-wx1/)
 [![Rust](https://img.shields.io/badge/rust-1.85%2B-lightgrey.svg)](https://www.rust-lang.org)
 [![Safety](https://img.shields.io/badge/unsafe-forbidden-success.svg)](https://github.com/rust-lang/rfcs)
-[![License](https://img.shields.io/badge/license-MIT%2FApache--2.0-blue.svg)](LICENSE)
+[![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 
-**WX-1** is an independent, high-performance, language-agnostic scientific storage format and engine specifically engineered for numerical weather prediction (NWP), climate reanalysis, and AI-driven weather modeling (GraphCast, FourCastNet, Pangu-Weather, GenCast).
+**WX-1** (`tempest-wx1` v0.1.3) is a scientific storage container format engineered for numerical weather prediction (NWP), climate reanalysis (ERA5), and AI-driven weather modeling.
 
-It is written in 100% safe Rust with `#![forbid(unsafe_code)]`, featuring a stable C-ABI (`include/wx1.h`), native Python PyO3 bindings, an `xarray` backend engine (`engine="wx1"`), and bidirectional adapters for WMO GRIB Edition 1 & 2, NetCDF-4 (HDF5), and Zarr v2/v3.
-
----
-
-## Key Highlights
-
-* **100% Bit-Exact & Deterministic**: Strict mathematical preservation of raw IEEE 754 bit-patterns (`.view(np.uint32)`) for reproducible NWP restarts.
-* **4D Spatio-Temporal Atmospheric Tensors**: First-class support for `[time, level, latitude, longitude]` grids, isobaric pressure levels, hybrid sigma-pressure levels, ensembles, and unstructured meshes (UGRID).
-* **Per-Variable Pluggable Codecs**: Select `zstd_shuffle`, pure `zstd`, `lz4`, or bounded error quantization (`profile="output"`) individually per meteorological variable.
-* **Access-Optimized Chunk Topologies**:
-  * *Horizontal Map Chunking* (`[1, 721, 1440]`): Global synoptic weather maps in **8.86 ms** (30× faster than tiled storage).
-  * *Spatial Tile Chunking* (`[120, 32, 32]`): 120-step local station time-series (e.g. De Bilt) in **0.94 ms** (300× faster than map-oriented formats).
-* **Power-Loss & Crash Resilience**: Two-phase atomic commits with CRC32C chunk integrity, secondary forward-index recovery, and corrupt-header recovery.
-* **Direct GPU Acceleration**: Zero-copy / zero-overhead tensor streaming to NVIDIA GPUs via DLPack, JAX, and PyTorch (verified on CUDA 12).
+It is written in safe Rust (`#![forbid(unsafe_code)]`), featuring a stable C-ABI (`include/wx1.h`), Python PyO3 bindings, an `xarray` backend engine (`engine="wx1"`), and bidirectional adapters for WMO GRIB Edition 1 & 2, NetCDF-4 (HDF5), and Zarr v2/v3.
 
 ---
 
-## Benchmark Evidence: Authentic ECMWF ERA5 Reanalysis
+## Two Storage Modes: Exact GRIB Integer Packing vs. Native Float32
 
-Benchmarks executed on an authentic ECMWF ERA5 dataset (0.25° global equirectangular grid, $721 \times 1440 = 1.038.240$ points/slice):
+WX-1 separates storage into two explicit modes depending on the origin of the data:
 
-### 1. Surface Reanalysis (7 Variables, 120 Timesteps, $124.588.800$ floats/variable)
+1. **GRIB Integer Packing (`wx1_grib_delta` 1D & `wx1_grib_2d` 2D Lorenzo)**:
+   - For data originating from WMO GRIB1/GRIB2, WX-1 stores the exact quantized GRIB integers $X_i \in \{0, \dots, 2^{\text{bpv}}-1\}$ alongside the per-slice linear scaling parameters $(R, E, D)$ where $Y = (R + X \cdot 2^E) \cdot 10^{-D}$.
+   - **100% Bit-Exact on both `float64` and `float32`**: Reconstructed arrays match `eccodes.codes_get_values(gid)` (IEEE-754 64-bit `double` as well as 32-bit `float`) with $\Delta_{\max} = 0.0$ across all $29.5\times 10^9$ grid points tested, including GRIB bitmaps (`bitmapPresent=1`, `NaN` land masks) and NOAA GFS `grid_complex_spatial_differencing`.
+   - **File Size vs. GRIB2-AEC (`grid_ccsds`)**:
+     - With 1D horizontal delta (`wx1_grib_delta`), file size is at **parity with GRIB2-AEC** (`-3.5%` to `+5.4%` on multi-variable datasets; `-2.5%` on the full 52 GB ERA5 pressure-level dataset), while being **26–48% smaller** than lossless `float32` NetCDF-4 (`zlib4`) and Zarr v3.
+     - With the chunk-local **2D Lorenzo spatial predictor (`wx1_grib_2d`)**, WX-1 is **12.6% smaller than GRIB2-AEC** on ECMWF IFS 4D pressure levels and **15.2% smaller than GRIB2-AEC** (`19.52 GB` vs. `23.03 GB`) across all 28,416 fields of the 52 GB ERA5 pressure-level dataset.
+2. **Native Float32 Container (`wx1_zstd_shuffle` & `wx1_bitround`)**:
+   - For native IEEE-754 `float32` model output (e.g., NeuralGCM, JAX/PyTorch rollouts, or unquantized simulations), WX-1 stores `float32` chunks with byte-shuffle + Zstd.
+   - **File Size**: Lossless `float32` size is at **parity (`-0.5%` to `+2.5%`)** with NetCDF-4 `zlib4` and Zarr v3 `blosc_zstd3`. Optional mantissa bit-rounding (`bitround`) or bounded error quantization (`profile="output"`, `lossy_error_bound=...`) reduces size by 15–38%.
 
-| Variable | Description | Raw (f32) | NetCDF-4 (zlib) | WX-1 (Zstd+Shuffle) | WX-1 vs NetCDF-4 |
-| :--- | :--- | :--- | :--- | :--- | :--- |
-| **`tp`** | Total precipitation | 498.36 MB | 108.44 MB | **99.58 MB** | **-8.86 MB (-8.2%)** |
-| **`t2m`** | 2m temperature | 498.36 MB | ~186.22 MB | **174.56 MB** | **-11.66 MB (-6.3%)** |
-| **`msl`** | Mean sea level pressure | 498.36 MB | ~186.22 MB | **160.27 MB** | **-25.95 MB (-13.9%)** |
-| **`sp`** | Surface pressure | 498.36 MB | ~186.22 MB | **163.73 MB** | **-22.49 MB (-12.1%)** |
-| **`sst`** | Sea surface temp (NaN mask) | 498.36 MB | ~186.22 MB | **44.03 MB** | **-142.19 MB (-76.4%)** |
-| **`u10`** | 10m U-wind component | 498.36 MB | ~186.22 MB | **245.49 MB** | +59.27 MB |
-| **`v10`** | 10m V-wind component | 498.36 MB | ~186.22 MB | **246.88 MB** | +60.66 MB |
-| **TOTAL** | **All 7 Variables** | **3,488.52 MB** | **1,225.78 MB** | **1,134.55 MB** | **-91.23 MB (-7.4%)** |
+---
 
-* **Compared to GRIB1**: The original `era5_sfc_all.grib` is **1,675.46 MB**. WX-1 is **540.91 MB smaller (-32.3%)**.
-* **Bit-Exactness**: All $7 \times 124.588.800 = 872.121.600$ float32 values are 100% bit-exact ($\Delta_{\max} = 0.0$ via `.view(np.uint32)`).
-* **Read Slicing Latency**:
-  * Container Open: WX-1 **2.97 ms** vs NetCDF-4 57.91 ms (**19.5× faster**).
-  * 2D Global Field Read (R2): WX-1 **159.08 ms** vs NetCDF-4 883.33 ms (**5.55× faster**).
+## Measured Benchmark Evidence
 
-### 2. 4D Pressure Level Atmosphere (25.36 GB GRIB1, 13,200 Messages, 10..1000 hPa)
+### 1. Full 52 GiB ERA5 Pressure-Level Dataset (48 Hours × 37 Levels × 16 Variables = 28,416 Fields)
 
-* **4D Temperature (`t`, `[120, 11, 721, 1440]`)**: 5.48 GB raw compressed to **1.87 GB** (2.92× lossless compression).
-  * Global T500 hPa 2D slice read: **24.57 ms**.
-  * Full 3D column (11 levels × 721 × 1440): **223.04 ms**.
-  * Virtual Atmospheric Radiosonde Sounding (De Bilt, 52.1°N, 5.18°E): **178.98 ms**.
-* **4D Geopotential (`z`, `[120, 11, 721, 1440]`)**: 5.48 GB raw compressed to **1.51 GB** (3.63× lossless compression).
-  * Global Z500 hPa 2D slice read: **38.66 ms**.
+Measured across the **entire** unarchived Copernicus CDS ERA5 pressure-level download (`era5-pl.grib`, `55,320,496,128` bytes, $721 \times 1440$ global $0.25^\circ$ grid, $29,502,627,840$ grid points; no extrapolation):
 
-### 3. Fair Quantization & Wind Physics Benchmark
+| Format | Measured Size (MB) | Measured Size (GB) | vs. CDS GRIB1 (`grid_simple`) | vs. GRIB2-AEC (`grid_ccsds`) | `float64` Bit-Exact (`eccodes`) |
+| :--- | ---: | ---: | ---: | ---: | :--- |
+| Raw `float64` (`eccodes` native decode) | 236,021.02 | 236.02 | +326.6% | +924.9% | reference |
+| Raw `float32` | 118,010.51 | 118.01 | +113.3% | +412.5% | ✓ (32-bit) |
+| Original CDS GRIB1 (`grid_simple`, 8/12/16-bit) | 55,320.50 | 55.32 | +0.0% | +140.2% | ✓ (28,416 / 28,416) |
+| Transcoded GRIB2-AEC (`grid_ccsds`, native bpv) | 23,027.87 | 23.03 | -58.4% | +0.0% | ✓ (28,416 / 28,416) |
+| **WX-1 `wx1_grib_delta` (1D-delta)** | **22,443.07** | **22.44** | **-59.4%** | **-2.5%** | **✓ (28,416 / 28,416, $\Delta=0$)** |
+| **WX-1 `wx1_grib_2d` (2D Lorenzo predictor)** | **19,519.06** | **19.52** | **-64.7%** | **-15.2%** | **✓ (28,416 / 28,416, $\Delta=0$)** |
 
-Under an identical declared error bound ($\pm 0.01\text{ m/s}$ max error):
-* **NetCDF-4 Lossy** (`least_significant_digit=2`): **161.51 MB**
-* **WX-1 Lossy** (`lossy_error_bound=0.01`): **146.20 MB** (**15.31 MB smaller than NetCDF-4**)
-* **Physical Impact on Derived Atmospheric Quantities**:
-  * Wind Speed ($V = \sqrt{u^2+v^2}$): RMSE = $0.0045\text{ m/s}$ (relative error: 0.031%).
-  * Wind Direction ($0..360^\circ$): Mean error = $0.049^\circ$ (99% percentile: $0.272^\circ$).
-  * Spherical Relative Vorticity ($\zeta$): RMSE error is **1.45%** of physical synoptic vorticity standard deviation.
+### 2. Multi-Variable Containers Across Operational NWP & Reanalysis Datasets
+
+| Dataset | Source Packing | `bitsPerValue` | Source GRIB (MB) | GRIB2-AEC (MB) | **WX-1 `wx1_grib_delta` (MB)** | **WX-1 `wx1_zstd_shuffle` (MB)** | NetCDF-4 `zlib4` (MB) | Zarr v3 Sharded (MB) |
+| :--- | :--- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| **ERA5 4D PL (48h, 16 vars, 37 levs)** | GRIB1 `grid_simple` | 8, 12, 16 | 55,320.50 | 23,027.87 | **22,443.07** *(-2.5% vs AEC; **19,519.06** 2D)* | ~33,980 *(+1.2% vs NC4)* | ~33,570 | ~35,980 |
+| **ERA5 3D SFC (24h, 7 vars)** | GRIB1 `grid_simple` | 16 | 335.09 | 170.71 | **170.20** *(-0.3% vs AEC, -28.1% vs NC4)* | 241.54 *(+2.0% vs NC4)* | 236.77 | 251.46 |
+| **ECMWF AIFS 0.25° 3D SFC (8 vars, T=12)** | GRIB2 `grid_ccsds` | 8–12 | 19.43 | 19.42 | **19.27** *(-0.8% vs AEC, -46.8% vs NC4)* | 35.77 *(-1.3% vs NC4)* | 36.23 | 37.00 |
+| **ECMWF IFS 0.25° 3D SFC (9 vars, T=12)** | GRIB2 `grid_ccsds` | 7–12 | 52.78 | 52.77 | **54.91** *(+4.0% vs AEC, -36.9% vs NC4)* | 87.32 *(+0.3% vs NC4)* | 87.06 | 89.97 |
+| **ECMWF IFS 0.25° 4D PL (5 vars, 10 levs, T=12)** | GRIB2 `grid_ccsds` | 7–12 | 280.61 | 280.60 | **270.75** *(-3.5% vs AEC; **245.36** 2D = -12.6%)* | 531.31 *(+2.5% vs NC4)* | 518.42 | 553.09 |
+| **ECMWF IFS 0.1° 3D SFC (9 vars, T=12)** | GRIB2 `grid_ccsds` | 7–12 | 185.99 | 185.98 | **196.09** *(+5.4% vs AEC, -45.2% vs NC4)* | 356.74 *(-0.3% vs NC4)* | 357.80 | 369.05 |
+| **NOAA GFS 0.25° 4D PL (6 vars, 13 levs, T=12)** | GRIB2 `grid_complex` | 9–16 | 464.47 | — | **452.92** *(-2.5% vs GFS-orig, -59.8% vs NC4)* | 1,149.49 *(+2.1% vs NC4)* | 1,126.22 | 1,204.20 |
+| **DWD ICON-EU 0.0625° 4D PL (6 vars, 8 levs, T=24)** | GRIB2 `grid_ccsds` | 16 | 1,174.80 | 1,172.56 | **1,195.21** *(+1.7% vs AEC, -25.5% vs NC4)* | 1,622.10 *(+1.1% vs NC4)* | 1,605.05 | 1,725.08 |
+
+### 3. 4D Sub-Volume Random Access (Median $\pm$ IQR ms, $n=5$, Chunks `[1, 1, 721, 1440]`)
+
+On 4D pressure-level cubes (`ECMWF IFS 0.25°` `t` `[12, 10, 721, 1440]` and `ERA5` `t` `[4, 37, 721, 1440]`):
+- **Single-Level Map (`t500_map`, cold)**: `zarr3_blosc_zstd3` `6.4 ±0.2 ms`, `wx1_grib_int` `7.0 ±0.2 ms`, `zarr3_sharded` `7.5 ±0.3 ms`, `wx1_zstd_shuffle` `8.6 ±2.7 ms`, `wx1_grib_delta` `11.0 ±1.6 ms`, `grib2_orig_indexed` `11.2 ±0.2 ms`, `netcdf4_zlib4` `16.5 ±0.3 ms`.
+- **Vertical Sounding (`sounding_col`, 10–37 levels at 1 station, cold)**: WX-1 (`wx1_grib_delta` `14.0 ±0.5 ms` on 10 levels / `48.7 ±1.5 ms` on 37 levels) and Zarr v3 (`12.5–15.6 ms` on 10 levels / `48.6–66.0 ms` on 37 levels) perform at parity, and both are **6–9× faster** than NetCDF-4 (`97.5 ms` / `429.3 ms`), HDF5 (`85.7 ms` / `446.5 ms`), and indexed GRIB2 (`111.1 ms` / `526.8 ms`).
+- **Column Time-Series (`col_timeseries`, $T \times L$ slices at 1 station, cold)**:
+  - On IFS (`12 × 10 = 120` slices): `wx1_grib_delta` `98.9 ±1.3 ms`, `wx1_grib_int` `117.0 ±6.5 ms`, `zarr3_blosc_zstd3` `139.7 ±2.7 ms`, `zarr3_sharded` `142.8 ±10.2 ms`, vs. `netcdf4_zlib4` `987.4 ±18.1 ms` and `grib2_orig_indexed` `1,225.4 ±18.0 ms`.
+  - On ERA5 (`4 × 37 = 148` slices): `zarr3_blosc_zstd3` `171.4 ±3.4 ms`, `wx1_grib_int` `174.9 ±14.0 ms`, `wx1_grib_delta` `199.2 ±1.3 ms`, `zarr3_sharded` `226.4 ±5.3 ms`, vs. `netcdf4_zlib4` `1,756.3 ±40.5 ms` and `grib2_ccsds_native` `1,966.3 ±29.0 ms`.
 
 ---
 
 ## Quickstart
-
-### Supported Platforms
-* **Linux (x86_64, aarch64)**: Full native support, direct asynchronous I/O, and optional NVIDIA CUDA GPU pass-through.
-* **macOS (Apple Silicon, Intel)**: Full native POSIX support.
-* **Windows**: Native Windows (`cmd.exe` / PowerShell) is not supported. Windows users should use **WSL2 (Windows Subsystem for Linux 2, Ubuntu)** for full native POSIX performance, C-ABI compatibility, and GPU acceleration.
 
 ### Python Installation
 
@@ -82,149 +75,74 @@ Under an identical declared error bound ($\pm 0.01\text{ m/s}$ max error):
 pip install tempest-wx1
 ```
 
+### 1. Multi-Variable Dataset (`write_dataset` & `xarray`)
+
 ```python
-import wx1
 import numpy as np
 import xarray as xr
+import wx1
 
-# 1. Write a 4D meteorological array
-temperature = np.random.randn(120, 11, 721, 1440).astype(np.float32)
+t2m = np.random.uniform(250, 310, size=(24, 181, 360)).astype(np.float32)
+u10 = np.random.uniform(-20, 20, size=(24, 181, 360)).astype(np.float32)
+
+wx1.write_dataset(
+    "surface.wx1",
+    variables={"t2m": t2m, "u10": u10},
+    dimensions={"time": 24, "latitude": 181, "longitude": 360},
+    variable_dimensions={
+        "t2m": ["time", "latitude", "longitude"],
+        "u10": ["time", "latitude", "longitude"],
+    },
+    variable_attributes={
+        "t2m": {"units": "K", "long_name": "2m temperature"},
+        "u10": {"units": "m s-1", "long_name": "10m U wind"},
+    },
+    codec="zstd_shuffle",
+    workers=4,
+)
+
+# Open lazily via xarray backend
+ds = xr.open_dataset("surface.wx1", engine="wx1")
+print(ds)
+```
+
+### 2. 4D Atmospheric Tensor & Sub-Volume Slicing
+
+```python
+import numpy as np
+import wx1
+
+temperature = np.random.randn(12, 37, 721, 1440).astype(np.float32)
 wx1.write_array(
-    "forecast.wx1",
+    "forecast_4d.wx1",
     temperature,
     dataset_id="era5_t",
     variable_path="/t",
     dimensions=["time", "level", "latitude", "longitude"],
-    dimension_roles=["time", "vertical", "latitude", "longitude"],
-    chunk_shape=[1, 1, 721, 1440],  # 1 level/step per chunk
+    chunk_shape=[1, 1, 721, 1440],
     codec="zstd_shuffle",
-    profile="restart",               # strictly lossless
-    attributes={"units": "K", "long_name": "temperature"}
+    profile="restart",
+    attributes={"units": "K", "long_name": "temperature"},
 )
 
-# 2. Fast sub-volume slice reading
-with wx1.open_file("forecast.wx1") as f:
-    # Read T500 hPa slice at time step 0
-    t500 = f.read_array_slice("/t", start=[0, 6, 0, 0], count=[1, 1, 721, 1440])
-    print("T500 shape:", t500.shape)
+with wx1.open_file("forecast_4d.wx1") as f:
+    # Read single 2D pressure level slice
+    t500 = f.read_array_slice("/t", start=[0, 21, 0, 0], count=[1, 1, 721, 1440])
+    # Read vertical sounding column across all 37 levels at 1 grid point
+    sounding = f.read_array_slice("/t", start=[0, 0, 151, 20], count=[1, 37, 1, 1])
+```
 
-# 3. Native xarray integration
-ds = xr.open_dataset("forecast.wx1", engine="wx1")
-print(ds["t"])
+### 3. Multi-Format Conversion (GRIB1/GRIB2, NetCDF-4, Zarr v3)
 
-# 4. Multi-format conversion
-wx1.from_grib("input.grib", "converted.wx1", variable_name="t")
+```python
+import wx1
+import xarray as xr
+
+wx1.from_grib("input.grib2", "converted.wx1", variable_name="t2m")
 wx1.to_netcdf("converted.wx1", "output.nc")
-wx1.to_zarr("converted.wx1", "output.zarr")
-```
+wx1.to_zarr("converted.wx1", "output.zarr", zarr_format=3)
 
-### Rust
-
-Add to your `Cargo.toml`:
-```toml
-[dependencies]
-wx1-format = "1.0.0-rc1"
-```
-
-```rust
-use std::path::Path;
-use wx1_format::scientific::{ScientificContainerReader, ArrayReadPlan};
-
-fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let container = ScientificContainerReader::open(Path::new("forecast.wx1"))?;
-    let snapshot = container.snapshot()?;
-    
-    // Read arbitrary multidimensional slice without full decompression
-    let slice_bytes = snapshot.read_array_slice(
-        "/t",
-        &[0, 6, 0, 0],         // start
-        &[1, 1, 721, 1440],     // count
-    )?;
-    
-    println!("Read slice bytes: {}", slice_bytes.len());
-    Ok(())
-}
-```
-
-### C & Fortran (C-ABI FFI)
-
-```c
-#include "wx1.h"
-#include <stdio.h>
-#include <stdlib.h>
-
-int main() {
-    wx1_file_t* file = NULL;
-    wx1_error_t* err = NULL;
-
-    if (wx1_open_file("forecast.wx1", &file, &err) != WX1_OK) {
-        fprintf(stderr, "Error: %s\n", wx1_error_message(err));
-        wx1_error_free(err);
-        return 1;
-    }
-
-    uint64_t start[4] = {0, 6, 0, 0};
-    uint64_t count[4] = {1, 1, 721, 1440};
-    float data[721 * 1440];
-
-    wx1_read_array_slice(file, "/t", start, count, 4, data, sizeof(data), &err);
-    printf("Read T500: %f K\n", data[0]);
-
-    wx1_close_file(file);
-    return 0;
-}
-```
-
-Compile with:
-```bash
-gcc main.c -lwx1_ffi -Ldist -Iinclude -Wl,-rpath,dist -o main
-```
-
----
-
-## Workspace Structure
-
-* [`crates/wx1-format/`](crates/wx1-format/): Core pure safe-Rust storage engine, chunk pipeline, CBOR v2 schema, and recovery mechanics.
-* [`crates/wx1-ffi/`](crates/wx1-ffi/): Stable C-ABI implementation exporting [`include/wx1.h`](include/wx1.h).
-* [`crates/wx1-cli/`](crates/wx1-cli/): Standalone CLI tool (`wx1 inspect`, `wx1 repair`, `wx1 validate-scientific`).
-* [`crates/wx1-registry/`](crates/wx1-registry/): Generation and catalog registry.
-* [`python/wx1/`](python/wx1/): High-level Python package, `xarray` engine, and adapters for GRIB, NetCDF-4, and Zarr.
-* [`bench/runner/`](bench/runner/): Reproducible benchmark scripts for cross-format, hardware GPU, and ERA5 evaluations.
-* [`reports/`](reports/): Exhaustive benchmark reports with raw measured numbers and hardware specifications.
-
----
-
-## Architecture Decisions (ADRs)
-
-1. [ADR 0016: CBOR Schema v2 Scientific Data Model](docs/decisions/0016-schema-v2-scientific-data-model.md)
-2. [ADR 0022: Unified Lossy Compression Pipeline](docs/decisions/0022-unified-lossy-compression-pipeline-and-chunk-format.md)
-3. [ADR 0025: Parallel Staging & Async Commit](docs/decisions/0025-parallel-staging-and-merge-commit-pipeline.md)
-4. [ADR 0026: Non-Regular Grids & Cubed Sphere Staggering](docs/decisions/0026-non-regular-grids-cubed-sphere-halos-and-staggering.md)
-5. [ADR 0028: O(1) Indexed Scientific Array Planning](docs/decisions/0028-indexed-scientific-array-planner.md)
-6. [ADR 0029: Advanced Read Patterns (Point & Region Slicing)](docs/decisions/0029-advanced-point-time-region-and-tile-read-paths.md)
-7. [ADR 0030: External Format Adapters (GRIB2, NetCDF4, Zarr)](docs/decisions/0030-grib2-and-geotiff-external-format-adapters.md)
-8. [ADR 0031: Robustness, Security Hardening & Golden Vectors](docs/decisions/0031-fuzzing-golden-vectors-and-security-hardening.md)
-9. [ADR 0032: Stable C ABI & Cross-Language FFI](docs/decisions/0032-stable-c-abi-cbindgen-and-ffi-layer.md)
-10. [ADR 0033: GPU Tensor Ingestion & Zero-Copy DLPack](docs/decisions/0033-gpu-multi-device-streaming-and-dlpack-interoperability.md)
-
----
-
-## Verifying & Running Tests
-
-Run the complete test suite:
-
-```bash
-# 1. Rust Workspace Test Suite (163 tests)
-cargo fmt --all -- --check
-cargo clippy --workspace --all-targets -- -D warnings
-cargo test --workspace
-
-# 2. C-ABI FFI Integration Test
-gcc -Wall -Wextra -Werror -Iinclude tests/c_integration/test_c_abi.c -Ldist -lwx1_ffi -Wl,-rpath,dist -o /tmp/test_c_abi
-/tmp/test_c_abi
-
-# 3. Python & Hardware CUDA Test Suite (56 tests)
-pytest python/tests/ -v
+ds_zarr = xr.open_zarr("output.zarr")
 ```
 
 ---
@@ -233,11 +151,3 @@ pytest python/tests/ -v
 
 Licensed under the Apache License, Version 2.0 ([LICENSE](LICENSE) or http://www.apache.org/licenses/LICENSE-2.0).
 Copyright 2026 Jordy van Gils.
-
----
-
-## Acknowledgments & Data Attribution
-
-* Meteorological validation and benchmark datasets contain modified **Copernicus Climate Change Service (C3S) information [2026]**.
-* Neither the European Commission nor ECMWF is responsible for any use that may be made of the information or data it contains.
-* Reference: Hersbach, H. et al. (2020): *The ERA5 global reanalysis*. Quarterly Journal of the Royal Meteorological Society, 146(730), 1999–2049.

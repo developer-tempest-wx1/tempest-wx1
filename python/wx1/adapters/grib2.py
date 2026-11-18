@@ -163,6 +163,8 @@ def from_grib(
     lossy_error_bound: float | None = None,
     lossy_metric: str = "max_abs_error",
     durability: str = "durable",
+    mode: str = "grib_2d",
+    out_dtype: str = "float32",
 ):
     """Import a WMO GRIB2 file into a WX-1 scientific container (ADR 0030).
 
@@ -177,6 +179,21 @@ def from_grib(
     if not in_file.exists():
         raise FileNotFoundError(f"GRIB2 file not found: {in_file}")
 
+    grib_aliases = {
+        "t2m": {"t2m", "2t", "t"},
+        "2t": {"t2m", "2t", "t"},
+        "d2m": {"d2m", "2d"},
+        "2d": {"d2m", "2d"},
+        "u10": {"u10", "10u", "u"},
+        "10u": {"u10", "10u", "u"},
+        "v10": {"v10", "10v", "v"},
+        "10v": {"v10", "10v", "v"},
+        "msl": {"msl", "prmsl", "mslp"},
+        "mslp": {"msl", "prmsl", "mslp"},
+    }
+    req_var = str(variable_name).lstrip("/") if variable_name is not None else None
+    allowed_names = grib_aliases.get(req_var, {req_var}) if req_var is not None else None
+
     messages = []
     seen_vars = set()
     with open(in_file, "rb") as f:
@@ -189,7 +206,7 @@ def from_grib(
             except Exception:
                 sname = "unknown"
             seen_vars.add(sname)
-            if variable_name is not None and sname != str(variable_name):
+            if allowed_names is not None and sname not in allowed_names:
                 eccodes.codes_release(gid)
                 continue
             messages.append((gid, sname))
@@ -380,18 +397,29 @@ def from_grib(
             v_dim = "level"
             v_role = "vertical"
 
+        R_list, E_list, D_list, bpv_list = [], [], [], []
+        for gid, _ in selected_messages:
+            if eccodes.codes_is_defined(gid, "bitmapPresent") and eccodes.codes_get(gid, "bitmapPresent"):
+                eccodes.codes_set_double(gid, "missingValue", np.nan)
+            R_list.append(float(eccodes.codes_get_double(gid, "referenceValue")) if eccodes.codes_is_defined(gid, "referenceValue") else 0.0)
+            E_list.append(int(eccodes.codes_get(gid, "binaryScaleFactor")) if eccodes.codes_is_defined(gid, "binaryScaleFactor") else 0)
+            D_list.append(int(eccodes.codes_get(gid, "decimalScaleFactor")) if eccodes.codes_is_defined(gid, "decimalScaleFactor") else 0)
+            bpv_list.append(int(eccodes.codes_get(gid, "bitsPerValue")) if eccodes.codes_is_defined(gid, "bitsPerValue") else 16)
+
         if is_4d_spatiotemporal:
             attrs["grib:levels"] = ",".join(str(lvl) for lvl in unique_levels)
             if ni > 0 and nj > 0:
-                stacked = np.empty((num_times, num_unique_levels, nj, ni), dtype=np.float32)
+                stacked64 = np.empty((num_times, num_unique_levels, nj, ni), dtype=np.float64)
                 dims = ["time", "level", "latitude", "longitude"]
                 roles = ["time", "vertical", "latitude", "longitude"]
                 for idx, (gid, _) in enumerate(selected_messages):
                     t_idx = idx // num_unique_levels
                     l_idx = idx % num_unique_levels
                     vals = eccodes.codes_get_values(gid)
-                    stacked[t_idx, l_idx] = vals.astype(np.float32).reshape((nj, ni))
+                    stacked64[t_idx, l_idx] = vals.reshape((nj, ni))
+                stacked = stacked64 if out_dtype in ("float64", "f8") else stacked64.astype(np.float32)
             else:
+                stacked64 = None
                 stacked = np.empty((num_times, num_unique_levels, ni), dtype=np.float32)
                 dims = ["time", "level", "points"]
                 roles = ["time", "vertical", "other"]
@@ -402,6 +430,7 @@ def from_grib(
                     stacked[t_idx, l_idx] = vals.astype(np.float32)
             selected_messages = []
         else:
+            data_slices64 = []
             data_slices = []
             for gid, _ in selected_messages:
                 if is_ensemble:
@@ -410,12 +439,12 @@ def from_grib(
                     except Exception:
                         sorted_members.append(0)
                 values = eccodes.codes_get_values(gid)
-                # If values can be represented bit-exactly as float32, keep float32
+                data_slices64.append(values)
                 f32_vals = values.astype(np.float32)
-                if np.all(f32_vals.astype(np.float64) == values):
+                if out_dtype not in ("float64", "f8") and np.all(np.where(np.isnan(values), True, f32_vals.astype(np.float64) == values)):
                     data_slices.append(f32_vals)
                 else:
-                    data_slices.append(values)
+                    data_slices.append(values if out_dtype in ("float64", "f8") else f32_vals)
 
             if is_ensemble:
                 attrs["grib:ensemble_members"] = ",".join(str(m) for m in sorted_members)
@@ -423,25 +452,30 @@ def from_grib(
             if num_levels > 1:
                 attrs["grib:levels"] = ",".join(str(lvl) for lvl in all_levels)
                 if ni > 0 and nj > 0:
+                    stacked64 = np.stack([s.reshape((nj, ni)) for s in data_slices64], axis=0)
                     stacked = np.stack([s.reshape((nj, ni)) for s in data_slices], axis=0)
                     dims = [v_dim, "latitude", "longitude"]
                     roles = [v_role, "latitude", "longitude"]
                 else:
+                    stacked64 = None
                     stacked = np.stack(data_slices, axis=0)
                     dims = [v_dim, "points"]
                     roles = [v_role, "other"]
             else:
                 if ni > 0 and nj > 0:
+                    stacked64 = data_slices64[0].reshape((nj, ni))
                     stacked = data_slices[0].reshape((nj, ni))
                     dims = ["latitude", "longitude"]
                     roles = ["latitude", "longitude"]
                 else:
+                    stacked64 = None
                     stacked = data_slices[0]
                     dims = ["points"]
                     roles = ["other"]
 
-        ds_id = dataset_id or f"{in_file.stem}_{var_short_name}"
-        var_path = f"/{var_short_name}"
+        out_var_name = req_var if req_var is not None else var_short_name
+        ds_id = dataset_id or f"{in_file.stem}_{out_var_name}"
+        var_path = f"/{out_var_name}"
 
         # Ensure chunk size stays within safe raw limit (<= 32 MiB)
         if chunk_shape is not None:
@@ -450,7 +484,6 @@ def from_grib(
             max_chunk_bytes = 32 * 1024 * 1024
             elem_size = max(1, stacked.dtype.itemsize)
             if is_4d_spatiotemporal and ni > 0 and nj > 0:
-                # Cache-friendly default: [1, 1, nj, ni] if slice <= 32 MiB
                 slice_bytes = nj * ni * elem_size
                 if slice_bytes <= max_chunk_bytes:
                     resolved_chunk_shape = [1, 1, nj, ni]
@@ -462,6 +495,8 @@ def from_grib(
                             and int(np.prod(resolved_chunk_shape)) * elem_size > max_chunk_bytes
                         ):
                             resolved_chunk_shape[idx] = max(1, resolved_chunk_shape[idx] // 2)
+            elif stacked.ndim == 3 and ni > 0 and nj > 0 and nj * ni * elem_size <= max_chunk_bytes:
+                resolved_chunk_shape = [1, nj, ni]
             else:
                 resolved_chunk_shape = list(stacked.shape)
                 for idx in range(len(resolved_chunk_shape)):
@@ -471,9 +506,79 @@ def from_grib(
                     ):
                         resolved_chunk_shape[idx] = max(1, resolved_chunk_shape[idx] // 2)
 
+        if (
+            mode in ("grib_2d", "grib_delta", "grib_int")
+            and stacked64 is not None
+            and ni > 0
+            and nj > 0
+            and lossy_error_bound is None
+            and max(bpv_list) <= 16
+        ):
+            import json as _json
+            lead_shape = stacked64.shape[:-2] + (1, 1)
+            R_b = np.asarray(R_list, dtype=np.float64).reshape(lead_shape)
+            scale_b = (2.0 ** np.asarray(E_list, dtype=np.float64)).reshape(lead_shape)
+            dec_b = (10.0 ** np.asarray(D_list, dtype=np.float64)).reshape(lead_shape)
+            has_nan = bool(np.isnan(stacked64).any())
+            clean64 = np.where(np.isnan(stacked64), R_b, stacked64) if has_nan else stacked64
+            X = np.rint((clean64 * dec_b - R_b) / scale_b).astype(np.int32)
+            if has_nan:
+                X = np.where(np.isnan(stacked64), 65535, X)
+            X_u16 = np.clip(X, 0, 65535).astype(np.uint16)
+
+            cy = int(resolved_chunk_shape[-2])
+            cx = int(resolved_chunk_shape[-1])
+            pred_key = "2d" if mode == "grib_2d" else ("1d" if mode == "grib_delta" else "int")
+            if pred_key == "2d":
+                d1 = np.empty_like(X_u16, dtype=np.uint16)
+                for x0 in range(0, ni, cx):
+                    x1 = min(ni, x0 + cx)
+                    d1[..., x0] = X_u16[..., x0]
+                    if x1 > x0 + 1:
+                        d1[..., x0 + 1 : x1] = X_u16[..., x0 + 1 : x1] - X_u16[..., x0 : x1 - 1]
+                d2 = np.empty_like(d1, dtype=np.uint16)
+                for y0 in range(0, nj, cy):
+                    y1 = min(nj, y0 + cy)
+                    d2[..., y0, :] = d1[..., y0, :]
+                    if y1 > y0 + 1:
+                        d2[..., y0 + 1 : y1, :] = d1[..., y0 + 1 : y1, :] - d1[..., y0 : y1 - 1, :]
+                i2 = d2.view(np.int16).astype(np.int32)
+                zz = ((i2 << 1) ^ (i2 >> 15)).astype(np.uint16)
+                zz[..., ::cy, ::cx] = X_u16[..., ::cy, ::cx]
+                dt = np.uint8 if (not has_nan and int(zz.max()) < 256) else np.uint16
+                payload = zz.astype(dt)
+            elif pred_key == "1d":
+                zz = np.empty_like(X_u16, dtype=np.uint16)
+                for x0 in range(0, ni, cx):
+                    x1 = min(ni, x0 + cx)
+                    zz[..., x0] = X_u16[..., x0]
+                    if x1 > x0 + 1:
+                        diff_i16 = (X_u16[..., x0 + 1 : x1] - X_u16[..., x0 : x1 - 1]).view(np.int16).astype(np.int32)
+                        zz[..., x0 + 1 : x1] = ((diff_i16 << 1) ^ (diff_i16 >> 15)).astype(np.uint16)
+                dt = np.uint8 if (not has_nan and int(zz.max()) < 256) else np.uint16
+                payload = zz.astype(dt)
+            else:
+                dt = np.uint8 if (not has_nan and max(bpv_list) <= 8 and int(X_u16.max()) < 256) else np.uint16
+                payload = X_u16.astype(dt)
+
+            attrs["wx1:__grib_scale__"] = _json.dumps({
+                "pred": pred_key,
+                "cy": cy,
+                "cx": cx,
+                "has_nan": has_nan,
+                "out_dtype": out_dtype,
+                "R": R_list,
+                "E": E_list,
+                "D": D_list,
+            })
+            attrs["wx1:__logical_dtype__"] = out_dtype
+            write_payload = payload
+        else:
+            write_payload = stacked
+
         wx1.write_array(
             output_wx1_path,
-            stacked,
+            write_payload,
             dataset_id=ds_id,
             variable_path=var_path,
             dimensions=dims,

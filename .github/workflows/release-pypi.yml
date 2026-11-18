@@ -1,0 +1,103 @@
+name: Release to PyPI
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+jobs:
+  build-linux:
+    name: Build Linux wheels (${{ matrix.platform.target }})
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        platform:
+          - target: x86_64-unknown-linux-gnu
+            manylinux: "2_28"
+          - target: aarch64-unknown-linux-gnu
+            manylinux: "2_28"
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build wheels
+        uses: PyO3/maturin-action@v1
+        with:
+          working-directory: python
+          target: ${{ matrix.platform.target }}
+          manylinux: ${{ matrix.platform.manylinux }}
+          args: --release --out dist --find-interpreter --compatibility pypi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wheels-linux-${{ matrix.platform.target }}
+          path: python/dist/*.whl
+
+  build-macos:
+    name: Build macOS wheels (${{ matrix.target }})
+    runs-on: macos-latest
+    strategy:
+      matrix:
+        target:
+          - aarch64-apple-darwin
+          - x86_64-apple-darwin
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build wheels
+        uses: PyO3/maturin-action@v1
+        with:
+          working-directory: python
+          target: ${{ matrix.target }}
+          args: --release --out dist --find-interpreter --compatibility pypi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wheels-macos-${{ matrix.target }}
+          path: python/dist/*.whl
+
+  build-windows:
+    name: Build Windows wheels (x64)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build wheels
+        uses: PyO3/maturin-action@v1
+        with:
+          working-directory: python
+          target: x64
+          args: --release --out dist --find-interpreter --compatibility pypi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wheels-windows
+          path: python/dist/*.whl
+
+  build-sdist:
+    name: Build source distribution
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build sdist
+        uses: PyO3/maturin-action@v1
+        with:
+          working-directory: python
+          command: sdist
+          args: --out dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sdist
+          path: python/dist/*.tar.gz
+
+  pypi-publish:
+    name: Publish to PyPI
+    needs: [build-linux, build-macos, build-windows, build-sdist]
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          # Uncomment below if using a Repository Secret instead of PyPI Trusted Publishing (OIDC):
+          # password: ${{ secrets.PYPI_API_TOKEN }}
+          attestations: true
