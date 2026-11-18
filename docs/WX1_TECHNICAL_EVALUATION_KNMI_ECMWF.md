@@ -5,7 +5,7 @@
 **Computational Analysis & Verification:** Assisted by Google DeepMind Antigravity AI  
 **Target Institutions:** Scientific Computing, Archiving & Machine Learning Teams at **KNMI** and **ECMWF**  
 **Contact:** developer.tempestwx1@gmail.com  
-**Software:** `tempest-wx1` 0.1.3 (Rust core + Python bindings, on PyPI, https://github.com/developer-tempest-wx1/tempest-wx1) and `wx1-lorenzo` 0.1.0 (Zarr v3 codec, on PyPI, https://github.com/developer-tempest-wx1/wx1-lorenzo)  
+**Software:** `tempest-wx1` 0.1.4 (Rust core + Python bindings, on PyPI, https://github.com/developer-tempest-wx1/tempest-wx1) and `wx1-lorenzo` 0.1.1 (Zarr v3 codec, on PyPI, https://github.com/developer-tempest-wx1/wx1-lorenzo)  
 **Date:** November 2026  
 
 ---
@@ -25,7 +25,7 @@ This report evaluates the **WX-1 container** and the **2-D Lorenzo lattice predi
    * Tuning AEC (9 block-size/RSI combinations) saved only 0.8%; this suggests that parameter tuning alone does not close the gap, but we have not tested every AEC option.
 3. **Decode speed (single thread, ecCodes call vs. WX-1 pipeline, Section 4).** WX-1 2-D decodes a 721×1440 field to `float32` in 6.9–11.3 ms, faster than libaec through ecCodes (9.4–14.0 ms) in all six test fields, and 3–11× faster than JPEG2000 (32–158 ms). **ecCodes' complex+SD2 decoder is faster than WX-1 2-D in 5 of the 6 fields (about 7–28% higher throughput).** The honest trade-off against SD2 is therefore 3–12% smaller files for 7–28% slower decoding. Encode timings are not like-for-like (Section 4.2).
 4. **Message-exact archiving (ecCodes-generated messages only).** 988/988 messages (ERA5 GRIB1 PL and surface incl. bitmaps, IFS GRIB2 AEC PL and surface) were rebuilt byte-identically (SHA-256, `cmp`, `grib_compare` rc = 0). GFS complex-packing and DWD messages were **not** shown to roundtrip byte-exactly (Section 6).
-5. **Random access cost is O(K), K = chunks touched.** With one field per chunk, 2-D mode must decode whole fields: measured 37-level ERA5 sounding **289.8 ms**, 10-level IFS sounding 69.6 ms, 74-field ERA5 series 578 ms, 120-field IFS series 829 ms. The 1-D delta mode is much faster for these patterns (37.8 / 12.7 / 82 / 98 ms) but compresses less (−2.5% vs AEC on ERA5). Plain Zarr v3 without predictor is as fast as 1-D delta. See Table 5.1.
+5. **Random access cost is O(K), K = chunks touched.** With one field per chunk, 2-D mode must decode whole fields: measured 37-level ERA5 sounding 282.8 ms, 10-level IFS sounding 68.4 ms, 74-field ERA5 series 575.9 ms, 120-field IFS series 830.5 ms (all on variable `t`). The 1-D delta mode is much faster for these patterns (37.8 / 12.7 / 82 / 98 ms) but compresses less (−2.5% vs AEC on ERA5). Plain Zarr v3 without predictor is as fast as 1-D delta. See Table 5.1.
 
 ---
 ## 2. Benchmark Environment & Methodology
@@ -159,22 +159,22 @@ Access time scales with **O(K)**, K = number of chunks that must be decoded. All
 
 | pattern | WX-1 1-D delta | Zarr v3 blosc-zstd | Zarr v3 sharded | NetCDF-4 zlib4 | HDF5 gzip4 | GRIB2 AEC, indexed | GRIB2 AEC, re-encoded | WX-1 2-D (separate run) |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
-| ERA5 2-D map (1 field) | 9.9 | 6.4 | 6.8 | 16.3 | 15.0 | **6.2** | 21.7 | 8.6 |
-| ERA5 sounding (37 levels) | **37.8** | 41.1 | 43.7 | 423.2 | 446.8 | 205.0 | 469.6 | 289.8 |
-| ERA5 series (74 fields) | **82.4** | 87.9 | 96.8 | 841.9 | 892.6 | 379.8 | 932.4 | 578.2 |
-| IFS 2-D map (1 field) | 8.7 | **5.4** | 6.1 | 11.9 | 9.0 | 10.3 | 12.2 | 7.3 |
-| IFS sounding (10 levels) | 12.7 | 12.3 | **11.1** | 82.2 | 85.2 | 103.1 | 97.6 | 69.6 |
-| IFS series (120 fields) | **98.4** | 127.6 | 108.7 | 958.5 | 996.4 | 1205.7 | 1218.7 | 828.8 |
+| ERA5 2-D map (1 field) | 9.9 | 6.4 | 6.8 | 16.3 | 15.0 | **6.2** | 21.7 | 7.9 |
+| ERA5 sounding (37 levels) | **37.8** | 41.1 | 43.7 | 423.2 | 446.8 | 205.0 | 469.6 | 282.8 |
+| ERA5 series (74 fields) | **82.4** | 87.9 | 96.8 | 841.9 | 892.6 | 379.8 | 932.4 | 575.9 |
+| IFS 2-D map (1 field) | 8.7 | **5.4** | 6.1 | 11.9 | 9.0 | 10.3 | 12.2 | 7.1 |
+| IFS sounding (10 levels) | 12.7 | 12.3 | **11.1** | 82.2 | 85.2 | 103.1 | 97.6 | 68.4 |
+| IFS series (120 fields) | **98.4** | 127.6 | 108.7 | 958.5 | 996.4 | 1205.7 | 1218.7 | 830.5 |
 
 
 Notes:
-* Columns 1–7 come from `formats_era5_pl_all16_4steps_20261117_200733.json` (ERA5 `t`, 2 steps × 37 levels) and `formats_ecmwf_0p25_2026111618_7a39663d_pl_20261117_202659.json` (IFS, 12 steps × 10 levels, variable `t`); *n* = 5. Zarr/NetCDF/HDF5/WX-1 1-D were stored as the benchmark's native layouts (Zarr without predictor, one 721×1440 slab per chunk).
-* The last column is a **separate run** of `bench/bench_access_2d.py` (`access_2d_20261118_082524.json`, *n* = 5) with one field per chunk; for IFS it used variable `u` (same grid, 12 × 10 fields) because that is what the script reads, so the IFS 2-D column is not the identical variable as the others.
+* Columns 1–7 come from `formats_era5_pl_all16_4steps_20261117_200733.json` (ERA5 `t`, 2 steps × 37 levels) and `formats_ecmwf_0p25_2026111618_7a39663d_pl_20261117_202659.json` (IFS `t`, 12 steps × 10 levels); *n* = 5. Zarr/NetCDF/HDF5/WX-1 1-D were stored as the benchmark's native layouts (Zarr without predictor, one 721×1440 slab per chunk).
+* The last column is a **separate run** of `bench/bench_access_2d.py` (`access_2d_20261118_110432.json`, *n* = 5) with one field per chunk, using the **identical variable `t`** on both ERA5 (`2 × 37` fields) and IFS (`12 × 10` fields).
 * "sounding" = all levels of one step at one grid point; "series" = all steps and levels at one point. Reading one point still decodes whole fields.
-* Same 2-D runs for context: ERA5 series at one level (2 fields) 15.3 ms; IFS series at one level (12 fields) 83.5 ms. For comparison, **ecCodes decoding messages already in memory** (no file scan/index): ERA5 sounding 159 ms, ERA5 series 323 ms, IFS sounding 113 ms, IFS series 1,365 ms (ERA5 source is GRIB1 simple packing, which unpacks faster than AEC).
+* Same 2-D runs for context: ERA5 series at one level (2 fields) 15.2 ms; IFS series at one level (12 fields) 81.7 ms. For comparison, **ecCodes decoding messages already in memory** (no file scan/index): ERA5 sounding 162.6 ms, ERA5 series 336.5 ms, IFS sounding 95.6 ms, IFS series 1,122.2 ms (ERA5 source is GRIB1 simple packing, which unpacks faster than AEC).
 
 ### What this shows
-* **2-D mode loses on deep soundings of cheap-to-decode data:** the 37-level ERA5 sounding (289.8 ms) is slower than indexed GRIB2 (205 ms) and than in-memory ecCodes decode of the GRIB1 source (159 ms), and ~7× slower than plain Zarr v3 (41 ms). It wins against NetCDF-4/HDF5 (≈ 420–450 ms) and against GRIB2 AEC messages (IFS: 70 vs 98–103 ms).
+* **2-D mode loses on deep soundings of cheap-to-decode data:** the 37-level ERA5 sounding (282.8 ms) is slower than indexed GRIB2 (205 ms) and than in-memory ecCodes decode of the GRIB1 source (162.6 ms), and ~7× slower than plain Zarr v3 (41 ms). It wins against NetCDF-4/HDF5 (≈ 420–450 ms) and against GRIB2 AEC messages (IFS: 68.4 vs 98–103 ms).
 * **Zarr v3 without a predictor is as fast as WX-1 1-D mode** (and faster on 2-D maps: 6.4 vs 9.9 ms ERA5, 5.4 vs 8.7 ms IFS). WX-1 1-D is fastest in 3 of 6 rows only.
 * Smaller tiles (e.g. 64×64 chunks) would reduce the work per point read, at a compression cost; **this was not measured**.
 
@@ -204,7 +204,7 @@ flowchart LR
 ---
 ## 8. Examples (each executed in a fresh virtual environment)
 
-Environment: `python -m venv` with `pip install zarr==3.4.2 numpy numcodecs eccodes wx1-lorenzo==0.1.0 tempest-wx1==0.1.3`.
+Environment: `python -m venv` with `pip install zarr==3.4.2 numpy numcodecs eccodes wx1-lorenzo==0.1.1 tempest-wx1==0.1.4`.
 
 ### 8.1 Zarr v3 + Lorenzo2D, end to end: write → read back → bit-exact check → size vs GRIB2-AEC
 
@@ -283,14 +283,14 @@ from wx1.adapters import grib_exact
 profile = [grib_exact.read_field("archive.wx1", i)[150, 300] for i in range(10)]   # float64, bit-identical to ecCodes
 ```
 
-Each call decodes one full field (~7 ms); a 10-level profile took 69.6 ms in Section 5.
+Each call decodes one full field (~7 ms); a 10-level profile took 68.4 ms in Section 5.
 
 ---
 ## 9. Conclusions
 
 1. On regular lat/lon pressure-level fields, a 2-D Lorenzo predictor on the GRIB lattice produced files 12.6–15.2% smaller than GRIB2-AEC, bit-exact in float64, in the datasets tested. It is not smaller than AEC for the 7- and 9-bit IFS variables and several surface fields, and JPEG2000 is smaller still.
 2. Against GRIB2 complex packing with SD2 the trade is 3–12% smaller files for roughly 7–28% slower decoding; against JPEG2000 it is larger files for 3–11× faster decoding.
-3. Random access depends on the layout: 2-D mode needs whole-field decodes (37-level sounding ≈ 290 ms); a 1-D predictor or plain Zarr is faster for point/profile access and compresses less.
+3. Random access depends on the layout: 2-D mode needs whole-field decodes (37-level sounding ≈ 283 ms); a 1-D predictor or plain Zarr is faster for point/profile access and compresses less.
 4. The codec route (Route 1) is the one that can be adopted without a new container. Before external use it still needs: zarr-extensions registration, independent runs on other hardware and by other people, tests on reduced Gaussian grids (where a different predictor is needed), and message-level support for non-ecCodes producers.
 
 *Analysis, scripts and drafting were done with AI assistance (Google DeepMind Antigravity); the author is responsible for the content. All numbers refer to the JSON/markdown files in `bench/results/`.*
