@@ -174,10 +174,10 @@ def from_grib(
     import numpy as np
     import wx1
 
-    eccodes = _require_eccodes()
     in_file = Path(input_path)
     if not in_file.exists():
         raise FileNotFoundError(f"GRIB2 file not found: {in_file}")
+    eccodes = _require_eccodes()
 
     grib_aliases = {
         "t2m": {"t2m", "2t", "t"},
@@ -628,8 +628,10 @@ def to_grib(
     import numpy as np
     import wx1
 
-    eccodes = _require_eccodes()
     in_file = Path(input_wx1_path)
+    if not in_file.exists():
+        raise FileNotFoundError(f"WX-1 file not found: {in_file}")
+    eccodes = _require_eccodes()
     out_file = Path(output_grib_path)
 
     with wx1.open_file(in_file) as f:

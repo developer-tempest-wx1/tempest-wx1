@@ -91,10 +91,10 @@ def from_netcdf(
     import numpy as np
     import wx1
 
-    netCDF4 = _require_netcdf4()
     in_file = Path(input_path)
     if not in_file.exists():
         raise FileNotFoundError(f"NetCDF file not found: {in_file}")
+    netCDF4 = _require_netcdf4()
 
     with netCDF4.Dataset(in_file, "r") as ds:
         var_names = list(ds.variables.keys())
@@ -213,8 +213,10 @@ def to_netcdf(
     import numpy as np
     import wx1
 
-    netCDF4 = _require_netcdf4()
     in_file = Path(input_wx1_path)
+    if not in_file.exists():
+        raise FileNotFoundError(f"WX-1 file not found: {in_file}")
+    netCDF4 = _require_netcdf4()
     out_file = Path(output_nc_path)
 
     with wx1.open_file(in_file) as f:

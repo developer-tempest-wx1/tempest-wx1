@@ -100,10 +100,10 @@ def from_zarr(
     import numpy as np
     import wx1
 
-    zarr = _require_zarr()
     in_file = Path(input_path)
     if not in_file.exists():
         raise FileNotFoundError(f"Zarr store not found: {in_file}")
+    zarr = _require_zarr()
 
     target_array = None
     group_attrs: dict[str, Any] = {}
@@ -221,8 +221,10 @@ def to_zarr(
     import numpy as np
     import wx1
 
-    zarr = _require_zarr()
     in_file = Path(input_wx1_path)
+    if not in_file.exists():
+        raise FileNotFoundError(f"WX-1 file not found: {in_file}")
+    zarr = _require_zarr()
     out_dir = Path(output_zarr_path)
 
     with wx1.open_file(in_file) as f:
