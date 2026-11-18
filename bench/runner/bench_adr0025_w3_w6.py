@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """ADR 0025 Benchmark Suite: W3 (Parallel Worker Scaling) & W6 (NWP Loop Async vs Sync Writer).
 
-Strictly stores all temporary and output files on the Windows D: drive
-(/mnt/d/Weer/Uitvoer/data/wx1_bench_scratch) and NEVER on the WSL C: virtual disk.
+Strictly stores all temporary and output files on `$WX1_SCRATCH` (if set, otherwise
+`~/WX-1-TESTS/scratch`) and NEVER on the WSL C: virtual disk.
 """
 
 from __future__ import annotations
@@ -22,13 +22,14 @@ sys.path.insert(0, str(ROOT / "python"))
 import wx1  # noqa: E402
 
 
-SCRATCH_ROOT = Path(os.environ.get("WX1_SCRATCH", "/mnt/d/Weer/Uitvoer/data/wx1_bench_scratch"))
+DATA_ROOT = Path(os.environ.get("WX1_DATA_ROOT", str(Path.home() / "wx1_data")))
+SCRATCH_ROOT = Path(os.environ.get("WX1_SCRATCH", str(Path.home() / "WX-1-TESTS" / "scratch")))
 RESULTS_JSON = ROOT / "bench" / "results" / "adr0025_w3_w6_benchmark.json"
 
 
 def load_real_cube() -> tuple[np.ndarray, str]:
-    """Load the 3D ENFO 2t (50, 261, 661) float32 array from D: drive."""
-    enfo_nc = Path("/mnt/d/Weer/Uitvoer/data/ecmwf/20261026_12z_enfo/crop/sfc/test_formats/ecmwf_enfo_sfc_2t_uncompressed.nc")
+    """Load the 3D ENFO 2t (50, 261, 661) float32 array from `$WX1_DATA_ROOT`."""
+    enfo_nc = DATA_ROOT / "ecmwf/20261026_12z_enfo/crop/sfc/test_formats/ecmwf_enfo_sfc_2t_uncompressed.nc"
     if enfo_nc.exists():
         import netCDF4 as nc
         with nc.Dataset(enfo_nc, "r") as ds:

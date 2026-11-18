@@ -1,7 +1,7 @@
 # WX-1 Rapport: ERA5 4D Pressure Level & Wind-Codec Benchmark
 
 **Datum**: 2026-11-02 23:07:00 CET  
-**Locatie Data**: `/mnt/d/Weer/Uitvoer/data/era5/pl/` & `/mnt/d/Weer/Uitvoer/data/era5/sfc/`  
+**Locatie Data**: `<DATA_DIR>/era5/pl/` & `<DATA_DIR>/era5/sfc/`  
 **Bronbestand PL**: `d09d810dc31d23c9a510bf055175ffa9.grib` (25,36 GB, 13.200 berichten, WMO GRIB Edition 1)  
 **Doel**: Volledige 4D atmosferische tensoren `[time, level, latitude, longitude]` en empirische evaluatie van compressie- en chunking-optimalisatie voor windvelden.
 

@@ -64,7 +64,7 @@ Gemeten met 100 herhalingen op een release-build voor een slice die exact $k = 4
 ### Verificatie & Tests:
 - **125 Rust workspace tests** geslaagd (`cargo test --workspace`), 0 warnings (`cargo clippy --workspace --all-targets -- -D warnings`), `cargo fmt --all -- --check` clean.
 - **25 Python pytest tests** geslaagd (`pytest python/tests`).
-- **Alle geconverteerde testbestanden (`.nc`, `.zarr`, `.wx1`, `.grib2`) staan uitsluitend op de D-schijf** in de `test_formats`-submappen van de drie brondatasets (`/mnt/d/Weer/Uitvoer/data/...`), 0 B aan testdata op de WSL C-schijf.
+- **Alle geconverteerde testbestanden (`.nc`, `.zarr`, `.wx1`, `.grib2`) staan uitsluitend op de D-schijf** in de `test_formats`-submappen van de drie brondatasets (`<DATA_DIR>/...`), 0 B aan testdata op de WSL C-schijf.
 - Volledige benchmarkresultaten van alle 5 datasets (`ecmwf_nh_sfc_2t`, `ecmwf_nh_pl_t14`, `knmi_harm46_2t_12steps`, `ecmwf_enfo_sfc_2t`, `ecmwf_enfo_pl_t500`) zijn opgeslagen in `bench/results/d_drive_all_datasets_benchmark.json`.
 
 

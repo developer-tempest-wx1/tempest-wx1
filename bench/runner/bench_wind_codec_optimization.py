@@ -10,13 +10,15 @@ Evaluates:
 
 from __future__ import annotations
 
+import os
 import time
 from pathlib import Path
 import netCDF4 as nc
 import numpy as np
 import wx1
 
-NC_FILE = Path("/mnt/d/Weer/Uitvoer/data/era5/sfc/era5_sfc_instant.nc")
+DATA_ROOT = Path(os.environ.get("WX1_DATA_ROOT", str(Path.home() / "wx1_data")))
+NC_FILE = DATA_ROOT / "era5/sfc/era5_sfc_instant.nc"
 OUTPUT_DIR = Path("/tmp/wind_codec_bench")
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 

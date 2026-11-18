@@ -40,6 +40,7 @@ import wx1
 
 
 EXT4_BENCH_DIR = Path(os.environ.get("WX1_BENCH_DATA_DIR", str(Path.home() / "wx1_bench_ext4")))
+DATA_ROOT = Path(os.environ.get("WX1_DATA_ROOT", str(Path.home() / "wx1_data")))
 
 
 # ---------------------------------------------------------------------------
@@ -128,10 +129,11 @@ def generate_datasets():
     jax_pde_model = np.asarray(z_state, dtype=np.float32)
 
     # C. EUMETSAT MTG-I1 FCI L2 NetCDF Satellite Observations
-    sat_nc_files = glob.glob("/mnt/d/Weer/Uitvoer/data/satellite_scratch/*.nc")
+    sat_dir = DATA_ROOT / "satellite_scratch"
+    sat_nc_files = sorted(str(p) for p in sat_dir.glob("*.nc"))
     if not sat_nc_files:
         raise FileNotFoundError(
-            "Satellite NetCDF not found in /mnt/d/Weer/Uitvoer/data/satellite_scratch/"
+            f"Satellite NetCDF not found in {sat_dir}"
         )
     sat_path = sat_nc_files[0]
     ds = nc.Dataset(sat_path)
@@ -604,9 +606,9 @@ def benchmark_r2_ablation(fs_mode="d_drive"):
         ]
     else:
         test_cases = [
-            ("ecmwf_nh_sfc_2t", Path("/mnt/d/Weer/Uitvoer/data/ecmwf/20261029_12z_oper_allvars/crop_nh_allvars/sfc/test_formats/ecmwf_nh_sfc_2t_restart_lossless.wx1")),
-            ("ecmwf_nh_pl_t14", Path("/mnt/d/Weer/Uitvoer/data/ecmwf/20261029_12z_oper_allvars/crop_nh_allvars/pl/test_formats/ecmwf_nh_pl_t14_restart_lossless.wx1")),
-            ("knmi_harm46_nl", Path("/mnt/d/Weer/Uitvoer/data/knmi/nl/HARM46_V1_P1_2026102815/test_formats/knmi_harm46_2t_12steps_restart_lossless.wx1")),
+            ("ecmwf_nh_sfc_2t", DATA_ROOT / "ecmwf/20261029_12z_oper_allvars/crop_nh_allvars/sfc/test_formats/ecmwf_nh_sfc_2t_restart_lossless.wx1"),
+            ("ecmwf_nh_pl_t14", DATA_ROOT / "ecmwf/20261029_12z_oper_allvars/crop_nh_allvars/pl/test_formats/ecmwf_nh_pl_t14_restart_lossless.wx1"),
+            ("knmi_harm46_nl", DATA_ROOT / "knmi/nl/HARM46_V1_P1_2026102815/test_formats/knmi_harm46_2t_12steps_restart_lossless.wx1"),
         ]
 
     ablation_results = []
@@ -721,9 +723,9 @@ def benchmark_adr0029_read_paths(fs_mode="d_drive"):
         enfo_nc = base_dir / "ecmwf_enfo_sfc_2t_zlib.nc"
         enfo_zarr = base_dir / "ecmwf_enfo_sfc_2t_shuffle.zarr"
     else:
-        sfc_base = Path("/mnt/d/Weer/Uitvoer/data/ecmwf/20261029_12z_oper_allvars/crop_nh_allvars/sfc/test_formats")
-        pl_base = Path("/mnt/d/Weer/Uitvoer/data/ecmwf/20261029_12z_oper_allvars/crop_nh_allvars/pl/test_formats")
-        enfo_base = Path("/mnt/d/Weer/Uitvoer/data/ecmwf/20261026_12z_enfo/crop/sfc/test_formats")
+        sfc_base = DATA_ROOT / "ecmwf/20261029_12z_oper_allvars/crop_nh_allvars/sfc/test_formats"
+        pl_base = DATA_ROOT / "ecmwf/20261029_12z_oper_allvars/crop_nh_allvars/pl/test_formats"
+        enfo_base = DATA_ROOT / "ecmwf/20261026_12z_enfo/crop/sfc/test_formats"
         sfc_path = sfc_base / "ecmwf_nh_sfc_2t_restart_lossless.wx1"
         sfc_grib = sfc_base / "ecmwf_nh_sfc_2t.grib2"
         sfc_nc = sfc_base / "ecmwf_nh_sfc_2t_zlib.nc"

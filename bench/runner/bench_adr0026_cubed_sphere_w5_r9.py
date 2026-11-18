@@ -13,8 +13,8 @@
    - NetCDF4 (`zlib=True, complevel=4, shuffle=True`)
    Measures R1 (open), R9 (read 1 tile interior vs with halos), and R9 (read all 6 tiles), with median & p95.
 
-Strictly stores all temporary and output files on the Windows D: drive
-(/mnt/d/Weer/Uitvoer/data/wx1_bench_scratch) and NEVER on the WSL C: virtual disk.
+Strictly stores all temporary and output files on `$WX1_SCRATCH` (if set, otherwise
+`~/WX-1-TESTS/scratch`) and NEVER on the WSL C: virtual disk.
 """
 
 from __future__ import annotations
@@ -36,7 +36,8 @@ sys.path.insert(0, str(ROOT / "python"))
 import wx1  # noqa: E402
 
 
-SCRATCH_ROOT = Path(os.environ.get("WX1_SCRATCH", "/mnt/d/Weer/Uitvoer/data/wx1_bench_scratch"))
+DATA_ROOT = Path(os.environ.get("WX1_DATA_ROOT", str(Path.home() / "wx1_data")))
+SCRATCH_ROOT = Path(os.environ.get("WX1_SCRATCH", str(Path.home() / "WX-1-TESTS" / "scratch")))
 RESULTS_JSON = ROOT / "bench" / "results" / "adr0026_cubed_sphere_w5_r9.json"
 
 
@@ -57,7 +58,7 @@ def make_realistic_noisy_cubed_sphere(n_levels: int, c_res: int, halo: int, seed
     nx = c_res + 2 * halo
     rng = np.random.RandomState(seed)
 
-    real_nc = Path("/mnt/d/Weer/Uitvoer/data/ecmwf/20261029_12z_oper_allvars/crop_nh_allvars/pl/test_formats/ecmwf_nh_pl_t14_uncompressed.nc")
+    real_nc = DATA_ROOT / "ecmwf/20261029_12z_oper_allvars/crop_nh_allvars/pl/test_formats/ecmwf_nh_pl_t14_uncompressed.nc"
     arr = np.empty((6, n_levels, ny, nx), dtype="<f4")
 
     if real_nc.exists():

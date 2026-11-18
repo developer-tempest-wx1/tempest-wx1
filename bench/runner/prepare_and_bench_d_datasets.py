@@ -1,8 +1,8 @@
-"""Prepare Zarr 3, NetCDF4, and WX-1 test files directly in the D:\\ dataset directories
+"""Prepare Zarr 3, NetCDF4, and WX-1 test files directly under `$WX1_DATA_ROOT`
 and run cross-format benchmarks (lossless and lossy separated).
 
-IMPORTANT: All generated files MUST stay on /mnt/d/Weer/Uitvoer/data/... and NEVER
-on the WSL ext4 disk (which lives on the Windows C: drive).
+IMPORTANT: Set `WX1_DATA_ROOT` to a high-capacity data volume so large
+artifacts stay off the OS virtual disk.
 """
 
 from __future__ import annotations
@@ -20,9 +20,10 @@ import numpy as np
 import zarr
 import wx1
 
-D_OPER_NH = Path("/mnt/d/Weer/Uitvoer/data/ecmwf/20261029_12z_oper_allvars/crop_nh_allvars")
-D_KNMI_CY46 = Path("/mnt/d/Weer/Uitvoer/data/knmi/nl/HARM46_V1_P1_2026102815")
-D_ENFO_CROP = Path("/mnt/d/Weer/Uitvoer/data/ecmwf/20261026_12z_enfo/crop")
+DATA_ROOT = Path(os.environ.get("WX1_DATA_ROOT", str(Path.home() / "wx1_data")))
+D_OPER_NH = DATA_ROOT / "ecmwf/20261029_12z_oper_allvars/crop_nh_allvars"
+D_KNMI_CY46 = DATA_ROOT / "knmi/nl/HARM46_V1_P1_2026102815"
+D_ENFO_CROP = DATA_ROOT / "ecmwf/20261026_12z_enfo/crop"
 
 
 def get_dir_or_file_size(path: Path) -> int:
@@ -127,8 +128,7 @@ def convert_and_benchmark_case(
     eps_bound: float = 0.01,
     reps: int = 10,
 ) -> list[dict[str, Any]]:
-    """Convert array to NetCDF4 (uncompressed + zlib), Zarr 3, and WX-1 (restart + lossy) on D: and benchmark."""
-    assert str(out_dir).startswith("/mnt/d/"), f"Forbidden non-D: path: {out_dir}"
+    """Convert array to NetCDF4 (uncompressed + zlib), Zarr 3, and WX-1 (restart + lossy) under DATA_ROOT and benchmark."""
     out_dir.mkdir(parents=True, exist_ok=True)
 
     nc_uncomp_path = out_dir / f"{case_id}_uncompressed.nc"

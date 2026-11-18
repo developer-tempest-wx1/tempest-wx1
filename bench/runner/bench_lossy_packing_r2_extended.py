@@ -10,8 +10,8 @@
    - Evaluates on ecmwf_nh_sfc_2t and ecmwf_nh_pl_t14
    - Compares GRIB2 CCSDS bits/val against WX-1 integer packing (offset + scale + 1D/2D predictor + shuffle + zstd).
 
-3. R2 30-run Cold vs Warm Benchmark on ext4 AND /mnt/d:
-   - 30 repetitions each on ext4 (/tmp/wx1_bench_r2) and /mnt/d (/mnt/d/Weer/Uitvoer/data/wx1_bench_scratch/r2_bench)
+3. R2 30-run Cold vs Warm Benchmark on ext4 AND scratch volume:
+   - 30 repetitions each on ext4 (/tmp/wx1_bench_r2) and `$WX1_SCRATCH/r2_bench`
    - Measures mean, median, p95, min, max, stddev.
 
 4. Extended JSON Schema & Automated Markdown Table Generation:
@@ -28,6 +28,9 @@ import os
 import subprocess
 import time
 from pathlib import Path
+
+DATA_ROOT = Path(os.environ.get("WX1_DATA_ROOT", str(Path.home() / "wx1_data")))
+SCRATCH_ROOT = Path(os.environ.get("WX1_SCRATCH", str(Path.home() / "wx1_bench_scratch")))
 
 # Ensure JAX runs on CPU to prevent CUDA out-of-memory on WSL
 os.environ["JAX_PLATFORMS"] = "cpu"
@@ -178,13 +181,9 @@ def benchmark_integer_packing_vs_grib2():
     print("=" * 70)
 
     # SFC 2t
-    sfc_grib = Path(
-        "/mnt/d/Weer/Uitvoer/data/ecmwf/20261029_12z_oper_allvars/crop_nh_allvars/sfc/test_formats/ecmwf_nh_sfc_2t.grib2"
-    )
+    sfc_grib = DATA_ROOT / "ecmwf/20261029_12z_oper_allvars/crop_nh_allvars/sfc/test_formats/ecmwf_nh_sfc_2t.grib2"
     # PL t14
-    pl_grib = Path(
-        "/mnt/d/Weer/Uitvoer/data/ecmwf/20261029_12z_oper_allvars/crop_nh_allvars/pl/test_formats/ecmwf_nh_pl_t_14levels.grib2"
-    )
+    pl_grib = DATA_ROOT / "ecmwf/20261029_12z_oper_allvars/crop_nh_allvars/pl/test_formats/ecmwf_nh_pl_t_14levels.grib2"
 
     results = []
 
@@ -306,7 +305,7 @@ def benchmark_unquantized_lossy():
     jax_field = np.asarray(jnp.array(field, dtype=jnp.float32))
 
     # 2. Satellite NetCDF Outgoing Longwave Radiation (real observational continuous field)
-    sat_nc = glob.glob("/mnt/d/Weer/Uitvoer/data/satellite_scratch/*.nc")[0]
+    sat_nc = sorted(str(p) for p in (DATA_ROOT / "satellite_scratch").glob("*.nc"))[0]
     ds = nc.Dataset(sat_nc)
     # Extract 1024x1024 subgrid over earth disk where values are valid
     sat_raw = np.array(
@@ -329,7 +328,7 @@ def benchmark_unquantized_lossy():
         ),
     ]
 
-    scratch_dir = Path("/mnt/d/Weer/Uitvoer/data/wx1_bench_scratch/lossy_tests")
+    scratch_dir = SCRATCH_ROOT / "lossy_tests"
     scratch_dir.mkdir(parents=True, exist_ok=True)
 
     records = []
@@ -496,9 +495,7 @@ def benchmark_r2_cold_warm_30reps():
     print("=" * 70)
 
     # Dataset: ECMWF NH Oper SFC 2t (901, 3600), 12.97 MB
-    sfc_grib = Path(
-        "/mnt/d/Weer/Uitvoer/data/ecmwf/20261029_12z_oper_allvars/crop_nh_allvars/sfc/test_formats/ecmwf_nh_sfc_2t.grib2"
-    )
+    sfc_grib = DATA_ROOT / "ecmwf/20261029_12z_oper_allvars/crop_nh_allvars/sfc/test_formats/ecmwf_nh_sfc_2t.grib2"
     with open(sfc_grib, "rb") as f:
         gid = eccodes.codes_grib_new_from_file(f)
         arr = (
@@ -512,7 +509,7 @@ def benchmark_r2_cold_warm_30reps():
 
     # Target test directories
     ext4_dir = Path("/tmp/wx1_bench_r2")
-    d_dir = Path("/mnt/d/Weer/Uitvoer/data/wx1_bench_scratch/r2_bench")
+    d_dir = SCRATCH_ROOT / "r2_bench"
     ext4_dir.mkdir(parents=True, exist_ok=True)
     d_dir.mkdir(parents=True, exist_ok=True)
 

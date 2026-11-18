@@ -1,7 +1,7 @@
 # WX-1 Rapport: ERA5 Surface Reanalysis & Multi-Format Verificatie
 
 **Datum**: 2026-11-02 21:13:00 CET  
-**Locatie Data**: `/mnt/d/Weer/Uitvoer/data/era5/sfc/` (gekopieerd vanaf `D:\Downloads\era5\sfc`)  
+**Locatie Data**: `<DATA_DIR>/era5/sfc/` (gekopieerd vanaf `<RAW_DOWNLOAD_DIR>\era5\sfc`)  
 **Data**: ECMWF ERA5 Surface Reanalysis (Oktober 2026 / herfst), 120 wereldwijde tijdstappen op 0.25° grid (`[120, 721, 1440]`).
 
 ---
@@ -23,7 +23,7 @@ De analyse van ChatGPT is **inhoudelijk zeer scherp en technisch correct**:
 
 ## 2. Analyse van de ERA5 Bestanden
 
-In `D:\Downloads\era5\sfc` stonden 3 bestanden:
+In `<RAW_DOWNLOAD_DIR>\era5\sfc` stonden 3 bestanden:
 
 | Bestand | Formaat | Bestandsgrootte | Inhoud & Structuur |
 | :--- | :--- | :--- | :--- |

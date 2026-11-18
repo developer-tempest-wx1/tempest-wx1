@@ -1,6 +1,6 @@
 {
   "benchmark": "ADR 0026 Rigorous Cubed-Sphere W5 Stall & R9 Cross-Format Benchmark",
-  "scratch_root": "/mnt/d/Weer/Uitvoer/data/wx1_bench_scratch",
+  "scratch_root": "<DATA_DIR>/wx1_bench_scratch",
   "r9_cross_format_c192_l60": {
     "data_source": "Real ECMWF 0.1 NH PL Patches + Continuous NWP Turbulence (6x60x198x198)",
     "c_resolution": 192,

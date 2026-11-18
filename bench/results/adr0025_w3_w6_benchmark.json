@@ -1,6 +1,6 @@
 {
   "benchmark": "ADR 0025 Parallel Staging & Async Writer (W3 & W6)",
-  "scratch_root": "/mnt/d/Weer/Uitvoer/data/wx1_bench_scratch",
+  "scratch_root": "<DATA_DIR>/wx1_bench_scratch",
   "w3_parallel_scaling": {
     "source": "ecmwf_enfo_sfc_2t (50x261x661, 34.50 MB)",
     "shape": [

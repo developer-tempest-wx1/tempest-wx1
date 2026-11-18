@@ -147,7 +147,7 @@ Variable: /temperature
 Datatype: F32; byte order: LittleEndian
 Shape: [2,2]
 Bytes: 16 (raw array payload; no file header)
--rw-r--r-- 1 j_ord j_ord 16 Nov  1 22:37 slice_2x2.raw
+-rw-r--r-- 1 user user 16 Nov  1 22:37 slice_2x2.raw
 0000000       285.00000       286.00000       289.00000       290.00000
 0000020
 --- 10. append-guard regressie (scientific weigert append) ---
