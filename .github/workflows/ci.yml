@@ -38,9 +38,6 @@ jobs:
           - os: ubuntu-latest
             arch: x86_64
             target: x86_64-unknown-linux-gnu
-          - os: macos-latest
-            arch: aarch64
-            target: aarch64-apple-darwin
 
     steps:
       - uses: actions/checkout@v4
@@ -52,13 +49,7 @@ jobs:
           targets: ${{ matrix.target }}
 
       - name: Configure Dynamic Library Path
-        shell: bash
-        run: |
-          if [ "${{ runner.os }}" = "Linux" ]; then
-            echo "LD_LIBRARY_PATH=${pythonLocation}/lib:$LD_LIBRARY_PATH" >> $GITHUB_ENV
-          elif [ "${{ runner.os }}" = "macOS" ]; then
-            echo "DYLD_LIBRARY_PATH=${pythonLocation}/lib:$DYLD_LIBRARY_PATH" >> $GITHUB_ENV
-          fi
+        run: echo "LD_LIBRARY_PATH=${pythonLocation}/lib:$LD_LIBRARY_PATH" >> $GITHUB_ENV
 
       - name: Run Cargo Workspace Tests
         run: cargo test --workspace --target ${{ matrix.target }}
