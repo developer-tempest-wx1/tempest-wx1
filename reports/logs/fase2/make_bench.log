@@ -11,14 +11,14 @@ PYTHONPATH=python:. python -m pytest -q bench/tests
 ....                                                                     [100%]
 =============================== warnings summary ===============================
 bench/tests/test_adapters.py::test_zarr3_adapter_roundtrip_is_bit_exact
-  /home/j_ord/miniconda3/envs/Tempest/lib/python3.12/site-packages/zarr/api/asynchronous.py:260: ZarrUserWarning: Consolidated metadata is currently not part in the Zarr format 3 specification. It may not be supported by other zarr implementations and may change in the future.
+  /home/user/miniconda3/envs/Tempest/lib/python3.12/site-packages/zarr/api/asynchronous.py:260: ZarrUserWarning: Consolidated metadata is currently not part in the Zarr format 3 specification. It may not be supported by other zarr implementations and may change in the future.
     warnings.warn(
 
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
 4 passed, 1 warning in 2.04s
 --- 4. make bench-run ---
 PYTHONPATH=python:. python -m bench.smoke_runner
-/home/j_ord/miniconda3/envs/Tempest/lib/python3.12/site-packages/zarr/api/asynchronous.py:260: ZarrUserWarning: Consolidated metadata is currently not part in the Zarr format 3 specification. It may not be supported by other zarr implementations and may change in the future.
+/home/user/miniconda3/envs/Tempest/lib/python3.12/site-packages/zarr/api/asynchronous.py:260: ZarrUserWarning: Consolidated metadata is currently not part in the Zarr format 3 specification. It may not be supported by other zarr implementations and may change in the future.
   warnings.warn(
 === WX-1 Phase 2 Step 1 Smoke Runner (20261101T215744Z) ===
 Fixture: regular lat/lon 31x16 F32 (496 elements)

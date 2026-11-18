@@ -22,7 +22,7 @@ In deze fase zijn vijf kerncomponenten gerealiseerd en geverifieerd:
 
 ## 2. Fuzzing & Robuustheidsanalyse
 
-De geïmplementeerde fuzz-tests bevinden zich in [`crates/wx1-format/tests/robustness_fuzz_security.rs`](file:///mnt/d/AI/weer-ai/Tempest/WX-1/crates/wx1-format/tests/robustness_fuzz_security.rs):
+De geïmplementeerde fuzz-tests bevinden zich in [`crates/wx1-format/tests/robustness_fuzz_security.rs`](file://<repo_root>/crates/wx1-format/tests/robustness_fuzz_security.rs):
 
 | Fuzzing Doel | Aantal Iteraties | Testmethode | Resultaat | Panics / Crashes |
 | :--- | :---: | :--- | :---: | :---: |
@@ -37,7 +37,7 @@ De geïmplementeerde fuzz-tests bevinden zich in [`crates/wx1-format/tests/robus
 
 ## 3. Onafhankelijke Golden Conformance Vectors
 
-In [`tests/fixtures/golden_vectors/`](file:///mnt/d/AI/weer-ai/Tempest/WX-1/tests/fixtures/golden_vectors/) zijn 11 onafhankelijke binaire testvectoren gegenereerd en getest via zowel Rust ([`crates/wx1-format/tests/golden_vectors.rs`](file:///mnt/d/AI/weer-ai/Tempest/WX-1/crates/wx1-format/tests/golden_vectors.rs)) als Python ([`python/tests/test_golden_vectors.py`](file:///mnt/d/AI/weer-ai/Tempest/WX-1/python/tests/test_golden_vectors.py)):
+In [`tests/fixtures/golden_vectors/`](file://<repo_root>/tests/fixtures/golden_vectors/) zijn 11 onafhankelijke binaire testvectoren gegenereerd en getest via zowel Rust ([`crates/wx1-format/tests/golden_vectors.rs`](file://<repo_root>/crates/wx1-format/tests/golden_vectors.rs)) als Python ([`python/tests/test_golden_vectors.py`](file://<repo_root>/python/tests/test_golden_vectors.py)):
 
 | Vector ID | Bestandsnaam | Doel & Inhoud | Grootte | Verwachte Respons | Rust Status | Python Status |
 | :--- | :--- | :--- | :---: | :--- | :---: | :---: |
@@ -144,7 +144,7 @@ De formele verificatietaken zijn uitgevoerd met de volgende uitkomsten:
 4. **`pytest python/tests/`**:  
    Resultaat: **45 geslaagd, 3 geskipt, 0 mislukt** (inclusief `test_golden_vectors.py`, alle 11 vectoren gevalideerd).
 5. **Cross-Platform Matrix & CI**:  
-   Gedefinieerd in [`.github/workflows/ci.yml`](file:///mnt/d/AI/weer-ai/Tempest/WX-1/.github/workflows/ci.yml) over Linux x86_64, Linux aarch64, macOS ARM64 en Windows x86_64.
+   Gedefinieerd in [`.github/workflows/ci.yml`](file://<repo_root>/.github/workflows/ci.yml) over Linux x86_64, Linux aarch64, macOS ARM64 en Windows x86_64.
 
 ---
 

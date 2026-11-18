@@ -2,6 +2,7 @@
 """Extract lean test datasets (temperature, u, v on sfc and 2 pressure levels) directly onto ext4."""
 
 from __future__ import annotations
+import os
 from pathlib import Path
 import eccodes
 import numpy as np
@@ -11,11 +12,12 @@ import sys
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "python"))
 import wx1
 
-EXT4_DIR = Path("/home/j_ord/wx1_bench_ext4")
+EXT4_DIR = Path(os.environ.get("WX1_BENCH_DATA_DIR", str(Path.home() / "wx1_bench_ext4")))
 EXT4_DIR.mkdir(parents=True, exist_ok=True)
 
-SFC_SRC = Path("/mnt/d/Weer/Uitvoer/data/ecmwf/20261029_12z_oper_allvars/crop_nh_allvars/sfc/20261029120000-0h-oper-fc-sfc.grib2")
-PL_SRC = Path("/mnt/d/Weer/Uitvoer/data/ecmwf/20261029_12z_oper_allvars/crop_nh_allvars/pl/20261029120000-0h-oper-fc-pl.grib2")
+DATA_ROOT = Path(os.environ.get("WX1_DATA_ROOT", str(EXT4_DIR / "raw")))
+SFC_SRC = DATA_ROOT / "ecmwf/20261029_12z_oper_allvars/crop_nh_allvars/sfc/20261029120000-0h-oper-fc-sfc.grib2"
+PL_SRC = DATA_ROOT / "ecmwf/20261029_12z_oper_allvars/crop_nh_allvars/pl/20261029120000-0h-oper-fc-pl.grib2"
 
 print(f"Target ext4 directory: {EXT4_DIR}")
 

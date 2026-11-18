@@ -305,7 +305,9 @@ def run_benchmark_for_dataset(dataset_name: str, ds_source: xr.Dataset, scratch_
 
 
 def main():
-    scratch_root = Path(os.environ.get("WX1_SCRATCH", "/home/j_ord/WX-1-TESTS/scratch")) / "formal_baseline"
+    default_scratch = str(Path.home() / "WX-1-TESTS" / "scratch")
+    scratch_root = Path(os.environ.get("WX1_SCRATCH", default_scratch)) / "formal_baseline"
+    bench_data_root = Path(os.environ.get("WX1_BENCH_DATA_DIR", str(Path(os.environ.get("WX1_SCRATCH", default_scratch)) / "bench")))
     scratch_root.mkdir(parents=True, exist_ok=True)
     results_dir = Path("bench/results")
     results_dir.mkdir(parents=True, exist_ok=True)
@@ -316,11 +318,11 @@ def main():
 
     all_results = []
     # 1. KNMI HARMONIE
-    harm_res = run_benchmark_for_dataset("harmonie_nl", load_operational_dataset("harmonie_nl", Path("/home/j_ord/WX-1-TESTS/scratch/bench"))[0], scratch_root)
+    harm_res = run_benchmark_for_dataset("harmonie_nl", load_operational_dataset("harmonie_nl", bench_data_root)[0], scratch_root)
     all_results.extend(harm_res)
 
     # 2. ECMWF Oper Europe
-    ecmwf_res = run_benchmark_for_dataset("ecmwf_oper_europe", load_operational_dataset("ecmwf_oper_europe", Path("/home/j_ord/WX-1-TESTS/scratch/bench"))[0], scratch_root)
+    ecmwf_res = run_benchmark_for_dataset("ecmwf_oper_europe", load_operational_dataset("ecmwf_oper_europe", bench_data_root)[0], scratch_root)
     all_results.extend(ecmwf_res)
 
     # Save CSV and JSON

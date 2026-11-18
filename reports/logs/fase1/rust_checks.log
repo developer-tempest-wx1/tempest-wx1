@@ -1,6 +1,6 @@
 === RUST CHECKS START 2026-11-01T22:35:41+01:00 ===
-Workdir: /mnt/d/AI/weer-ai/Tempest/WX-1
-Target dir: /home/j_ord/WX-1-TESTS/target
+Workdir: <repo_root>
+Target dir: /home/user/WX-1-TESTS/target
 --- 1. cargo fmt --all ---
 --- 2. cargo fmt --all -- --check ---
 --- 3. cargo test --workspace ---
@@ -23,7 +23,7 @@ Target dir: /home/j_ord/WX-1-TESTS/target
    Compiling heck v0.5.0
    Compiling unindent v0.2.4
    Compiling indoc v2.0.8
-   Compiling wx1-registry v0.3.1 (/mnt/d/AI/weer-ai/Tempest/WX-1/crates/wx1-registry)
+   Compiling wx1-registry v0.3.1 (<repo_root>/crates/wx1-registry)
    Compiling memoffset v0.9.1
    Compiling pyo3-build-config v0.24.2
    Compiling syn v2.0.119
@@ -35,25 +35,25 @@ Target dir: /home/j_ord/WX-1-TESTS/target
    Compiling zstd-sys v2.1.2+zstd.1.5.7
    Compiling blake3 v1.8.7
    Compiling zstd v0.13.4
-   Compiling wx1-format v0.1.0 (/mnt/d/AI/weer-ai/Tempest/WX-1/crates/wx1-format)
+   Compiling wx1-format v0.1.0 (<repo_root>/crates/wx1-format)
    Compiling pyo3-macros v0.24.2
-   Compiling wx1-cli v0.1.0 (/mnt/d/AI/weer-ai/Tempest/WX-1/crates/wx1-cli)
-   Compiling wx1-python-native v0.1.0 (/mnt/d/AI/weer-ai/Tempest/WX-1/bindings/wx1-python)
+   Compiling wx1-cli v0.1.0 (<repo_root>/crates/wx1-cli)
+   Compiling wx1-python-native v0.1.0 (<repo_root>/bindings/wx1-python)
     Finished `test` profile [unoptimized + debuginfo] target(s) in 11.48s
-     Running unittests src/main.rs (/home/j_ord/WX-1-TESTS/target/debug/deps/wx1_cli-d1dc586a91c9b47a)
+     Running unittests src/main.rs (/home/user/WX-1-TESTS/target/debug/deps/wx1_cli-d1dc586a91c9b47a)
 
 running 0 tests
 
 test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
 
-     Running tests/scientific_workflow.rs (/home/j_ord/WX-1-TESTS/target/debug/deps/scientific_workflow-0d93d4932f9efcf1)
+     Running tests/scientific_workflow.rs (/home/user/WX-1-TESTS/target/debug/deps/scientific_workflow-0d93d4932f9efcf1)
 
 running 1 test
 test scientific_demo_inspect_validate_and_slice_work_end_to_end ... ok
 
 test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
 
-     Running unittests src/lib.rs (/home/j_ord/WX-1-TESTS/target/debug/deps/wx1_format-e9f6deea90756ba0)
+     Running unittests src/lib.rs (/home/user/WX-1-TESTS/target/debug/deps/wx1_format-e9f6deea90756ba0)
 
 running 77 tests
 test chunk_storage_tests::chunk_container_roundtrips_both_byte_orders_and_partial_reads ... ok
@@ -136,7 +136,7 @@ test v039_persistent_btree_tests::append_byte_failure_at_every_byte_preserves_pr
 
 test result: ok. 77 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 7.31s
 
-     Running tests/scientific_arrays.rs (/home/j_ord/WX-1-TESTS/target/debug/deps/scientific_arrays-f3a47a85448a3bdb)
+     Running tests/scientific_arrays.rs (/home/user/WX-1-TESTS/target/debug/deps/scientific_arrays-f3a47a85448a3bdb)
 
 running 11 tests
 test rejects_invalid_chunk_coverage_and_overflowing_shapes ... ok
@@ -153,7 +153,7 @@ test large_multidimensional_array_plans_only_intersecting_small_chunks ... ok
 
 test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
 
-     Running tests/scientific_streaming.rs (/home/j_ord/WX-1-TESTS/target/debug/deps/scientific_streaming-3f81fb6e41161315)
+     Running tests/scientific_streaming.rs (/home/user/WX-1-TESTS/target/debug/deps/scientific_streaming-3f81fb6e41161315)
 
 running 7 tests
 test reader_writer_retries_interrupted_source_reads ... ok
@@ -166,7 +166,7 @@ test stream_writer_rejects_scientific_length_mismatch_before_writing ... ok
 
 test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
 
-     Running unittests src/lib.rs (/home/j_ord/WX-1-TESTS/target/debug/deps/_core-8269925f4f3fca58)
+     Running unittests src/lib.rs (/home/user/WX-1-TESTS/target/debug/deps/_core-8269925f4f3fca58)
 
 running 4 tests
 test tests::chunk_reference_builder_covers_a_rectangular_array ... ok
@@ -176,7 +176,7 @@ test tests::tile_reader_emits_three_dimensional_subtiles_in_row_major_order ... 
 
 test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
 
-     Running unittests src/lib.rs (/home/j_ord/WX-1-TESTS/target/debug/deps/wx1_registry-2a9c558db4102dbd)
+     Running unittests src/lib.rs (/home/user/WX-1-TESTS/target/debug/deps/wx1_registry-2a9c558db4102dbd)
 
 running 12 tests
 test tests::computes_added_removed_and_changed_parameters ... ok
@@ -222,7 +222,7 @@ test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fini
     Checking lz4_flex v0.11.6
     Checking unindent v0.2.4
     Checking memoffset v0.9.1
-    Checking wx1-registry v0.3.1 (/mnt/d/AI/weer-ai/Tempest/WX-1/crates/wx1-registry)
+    Checking wx1-registry v0.3.1 (<repo_root>/crates/wx1-registry)
    Compiling pyo3-build-config v0.24.2
    Compiling pyo3-ffi v0.24.2
    Compiling pyo3-macros-backend v0.24.2
@@ -234,9 +234,9 @@ test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fini
    Compiling pyo3-macros v0.24.2
    Compiling zstd-safe v7.4.0
     Checking zstd v0.13.4
-    Checking wx1-format v0.1.0 (/mnt/d/AI/weer-ai/Tempest/WX-1/crates/wx1-format)
-    Checking wx1-cli v0.1.0 (/mnt/d/AI/weer-ai/Tempest/WX-1/crates/wx1-cli)
-    Checking wx1-python-native v0.1.0 (/mnt/d/AI/weer-ai/Tempest/WX-1/bindings/wx1-python)
+    Checking wx1-format v0.1.0 (<repo_root>/crates/wx1-format)
+    Checking wx1-cli v0.1.0 (<repo_root>/crates/wx1-cli)
+    Checking wx1-python-native v0.1.0 (<repo_root>/bindings/wx1-python)
     Finished `dev` profile [unoptimized + debuginfo] target(s) in 6.09s
 --- 5. cargo bench -p wx1-format --bench wx1_performance --no-run ---
    Compiling libc v0.2.191
@@ -254,7 +254,7 @@ test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fini
    Compiling zstd-sys v2.1.2+zstd.1.5.7
    Compiling blake3 v1.8.7
    Compiling zstd v0.13.4
-   Compiling wx1-format v0.1.0 (/mnt/d/AI/weer-ai/Tempest/WX-1/crates/wx1-format)
+   Compiling wx1-format v0.1.0 (<repo_root>/crates/wx1-format)
     Finished `bench` profile [optimized] target(s) in 14.76s
-  Executable benches/wx1_performance.rs (/home/j_ord/WX-1-TESTS/target/release/deps/wx1_performance-e68c56dee41b9f7a)
+  Executable benches/wx1_performance.rs (/home/user/WX-1-TESTS/target/release/deps/wx1_performance-e68c56dee41b9f7a)
 === RUST CHECKS FINISHED 2026-11-01T22:36:22+01:00 ===

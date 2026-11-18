@@ -72,10 +72,10 @@ wx1_error_t wx1_read_array_slice(
 
 ## 3. C Integratietest & GCC Verificatie
 
-In [`tests/c_integration/test_c_abi.c`](file:///mnt/d/AI/weer-ai/Tempest/WX-1/tests/c_integration/test_c_abi.c) is een end-to-end integratieprogramma gerealiseerd en gecompileerd via GCC (`gcc -Wall -Wextra -Werror`):
+In [`tests/c_integration/test_c_abi.c`](file://<repo_root>/tests/c_integration/test_c_abi.c) is een end-to-end integratieprogramma gerealiseerd en gecompileerd via GCC (`gcc -Wall -Wextra -Werror`):
 1. **Versiecontrole**: Valideert `wx1_version_string()`.
 2. **Foutdetectie**: Opent niet-bestaand bestand; controleert `WX1_ERROR_IO` en de inhoud van `wx1_last_error_message()`.
-3. **Golden Vector Validatie**: Opent [`gv01_valid_scalar_2d_zstd.wx1`](file:///mnt/d/AI/weer-ai/Tempest/WX-1/tests/fixtures/golden_vectors/gv01_valid_scalar_2d_zstd.wx1).
+3. **Golden Vector Validatie**: Opent [`gv01_valid_scalar_2d_zstd.wx1`](file://<repo_root>/tests/fixtures/golden_vectors/gv01_valid_scalar_2d_zstd.wx1).
 4. **Metadata & Generatie**: Valideert `dataset_id = "gv01"` en `generation = 1`.
 5. **Inspectie**: Valideert variabele `t2m`, rank 2, shape `[16, 16]`, en datatype `WX1_DTYPE_F32`.
 6. **Capaciteitsgrenzen**: Test buffer te klein (`small_buf[100]`) $\to$ retourneert netjes `WX1_ERROR_BUFFER_TOO_SMALL` en rapporteert 1024 benodigde bytes.

@@ -30,28 +30,77 @@ import wx1
 from wx1.adapters import grib2, netcdf, zarr
 
 
-EXT4_BENCH_DIR = Path("/home/j_ord/wx1_bench_ext4")
+def _resolve_grib_bench_dir() -> Path | None:
+    env_dir = os.environ.get("WX1_BENCH_DATA_DIR")
+    return Path(env_dir) if env_dir else None
+
+
+def _grib_grid_shape(path: Path) -> tuple[int, int]:
+    import eccodes
+
+    with open(path, "rb") as f:
+        gid = eccodes.codes_grib_new_from_file(f)
+        try:
+            return int(eccodes.codes_get(gid, "Nj")), int(eccodes.codes_get(gid, "Ni"))
+        finally:
+            eccodes.codes_release(gid)
+
+
+def _write_synthetic_grib2(out_path: Path, sample: str, records: list[dict]) -> Path:
+    eccodes = pytest.importorskip("eccodes")
+    rng = np.random.default_rng(42)
+    with open(out_path, "wb") as fout:
+        for rec in records:
+            gid = eccodes.codes_grib_new_from_samples(sample)
+            try:
+                for k, v in rec.items():
+                    eccodes.codes_set(gid, k, v)
+                ni = int(eccodes.codes_get(gid, "Ni"))
+                nj = int(eccodes.codes_get(gid, "Nj"))
+                eccodes.codes_set(gid, "bitsPerValue", 16)
+                vals = (273.15 + 10.0 * rng.random(nj * ni)).astype(np.float64)
+                eccodes.codes_set_values(gid, vals)
+                eccodes.codes_write(gid, fout)
+            finally:
+                eccodes.codes_release(gid)
+    return out_path
 
 
 @pytest.fixture
-def ext4_grib_sfc():
-    path = EXT4_BENCH_DIR / "ecmwf_nh_sfc_2t.grib2"
-    if not path.exists():
-        pytest.skip(f"Ext4 lean GRIB2 file not found: {path}")
-    return path
+def ext4_grib_sfc(tmp_path):
+    bench_dir = _resolve_grib_bench_dir()
+    if bench_dir is not None:
+        candidate = bench_dir / "ecmwf_nh_sfc_2t.grib2"
+        if candidate.exists():
+            return candidate
+    return _write_synthetic_grib2(
+        tmp_path / "ecmwf_nh_sfc_2t.grib2",
+        "regular_ll_sfc_grib2",
+        [{"shortName": "2t", "typeOfLevel": "heightAboveGround", "level": 2}],
+    )
 
 
 @pytest.fixture
-def ext4_grib_pl():
-    path = EXT4_BENCH_DIR / "ecmwf_nh_pl_t_2levels.grib2"
-    if not path.exists():
-        pytest.skip(f"Ext4 lean GRIB2 file not found: {path}")
-    return path
+def ext4_grib_pl(tmp_path):
+    bench_dir = _resolve_grib_bench_dir()
+    if bench_dir is not None:
+        candidate = bench_dir / "ecmwf_nh_pl_t_2levels.grib2"
+        if candidate.exists():
+            return candidate
+    return _write_synthetic_grib2(
+        tmp_path / "ecmwf_nh_pl_t_2levels.grib2",
+        "regular_ll_pl_grib2",
+        [
+            {"shortName": "t", "typeOfLevel": "isobaricInhPa", "level": 500},
+            {"shortName": "t", "typeOfLevel": "isobaricInhPa", "level": 850},
+        ],
+    )
 
 
 def test_grib2_sfc_roundtrip_lossless_metadata(tmp_path, ext4_grib_sfc):
     """Test GRIB2 2D surface import -> WX-1 -> export to GRIB2 roundtrip with full metadata preservation."""
     pytest.importorskip("eccodes")
+    expected_nj, expected_ni = _grib_grid_shape(ext4_grib_sfc)
 
     out_wx1 = tmp_path / "sfc_test.wx1"
     out_grib = tmp_path / "sfc_roundtrip.grib2"
@@ -62,7 +111,7 @@ def test_grib2_sfc_roundtrip_lossless_metadata(tmp_path, ext4_grib_sfc):
         assert len(f.variables) == 1
         var = f.variables[0]
         assert var["path"] == "/2t"
-        assert var["shape"] == [901, 3600]
+        assert var["shape"] == [expected_nj, expected_ni]
         assert var["dimensions"] == ["latitude", "longitude"]
 
         # Check metadata preservation
@@ -79,7 +128,7 @@ def test_grib2_sfc_roundtrip_lossless_metadata(tmp_path, ext4_grib_sfc):
         assert attrs["cf:standard_name"] == "2t"
 
         wx1_data = f.read_array(var["path"])
-        assert wx1_data.shape == (901, 3600)
+        assert wx1_data.shape == (expected_nj, expected_ni)
 
     # 2. Export WX-1 to GRIB2
     exported_path = wx1.to_grib(out_wx1, out_grib, template_grib=ext4_grib_sfc)
@@ -108,6 +157,7 @@ def test_grib2_sfc_roundtrip_lossless_metadata(tmp_path, ext4_grib_sfc):
 def test_grib2_multilevel_pl_roundtrip(tmp_path, ext4_grib_pl):
     """Test GRIB2 multi-level isobaric import (3D array) -> WX-1 -> GRIB2."""
     pytest.importorskip("eccodes")
+    expected_nj, expected_ni = _grib_grid_shape(ext4_grib_pl)
 
     out_wx1 = tmp_path / "pl_test.wx1"
     out_grib = tmp_path / "pl_roundtrip.grib2"
@@ -117,7 +167,7 @@ def test_grib2_multilevel_pl_roundtrip(tmp_path, ext4_grib_pl):
         assert len(f.variables) == 1
         var = f.variables[0]
         assert var["path"] == "/t"
-        assert var["shape"] == [2, 901, 3600]
+        assert var["shape"] == [2, expected_nj, expected_ni]
         assert var["dimensions"] == ["level", "latitude", "longitude"]
 
         attrs = f.attributes
@@ -126,7 +176,7 @@ def test_grib2_multilevel_pl_roundtrip(tmp_path, ext4_grib_pl):
         assert attrs["grib:levels"] == "500,850"
 
         data_3d = f.read_array(var["path"])
-        assert data_3d.shape == (2, 901, 3600)
+        assert data_3d.shape == (2, expected_nj, expected_ni)
 
     # 2. Export back to GRIB2
     exported_path = wx1.to_grib(out_wx1, out_grib)

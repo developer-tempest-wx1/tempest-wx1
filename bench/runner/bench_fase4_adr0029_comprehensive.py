@@ -39,6 +39,9 @@ import zstandard as zstd
 import wx1
 
 
+EXT4_BENCH_DIR = Path(os.environ.get("WX1_BENCH_DATA_DIR", str(Path.home() / "wx1_bench_ext4")))
+
+
 # ---------------------------------------------------------------------------
 # Version & Workspace Hash
 # ---------------------------------------------------------------------------
@@ -337,9 +340,9 @@ def benchmark_cross_format_lossy(datasets: dict, fs_mode: str = "ext4"):
     print("=" * 70)
 
     if fs_mode == "ext4":
-        scratch_dir = Path("/home/j_ord/wx1_bench_ext4/cross_lossy")
+        scratch_dir = EXT4_BENCH_DIR / "cross_lossy"
     else:
-        scratch_dir = Path("/mnt/d/Weer/Uitvoer/data/wx1_bench_scratch/cross_lossy")
+        scratch_dir = Path(os.environ.get("WX1_SCRATCH", str(Path.home() / "wx1_bench_scratch"))) / "cross_lossy"
     scratch_dir.mkdir(parents=True, exist_ok=True)
 
     records = []
@@ -503,11 +506,12 @@ def benchmark_integer_packing_throughput(fs_mode="d_drive"):
     print("=" * 70)
 
     if fs_mode == "ext4":
-        sfc_grib = Path("/home/j_ord/wx1_bench_ext4/ecmwf_nh_sfc_2t.grib2")
-        pl_grib = Path("/home/j_ord/wx1_bench_ext4/ecmwf_nh_pl_t_14levels.grib2")
+        sfc_grib = EXT4_BENCH_DIR / "ecmwf_nh_sfc_2t.grib2"
+        pl_grib = EXT4_BENCH_DIR / "ecmwf_nh_pl_t_14levels.grib2"
     else:
-        sfc_grib = Path("/mnt/d/Weer/Uitvoer/data/ecmwf/20261029_12z_oper_allvars/crop_nh_allvars/sfc/test_formats/ecmwf_nh_sfc_2t.grib2")
-        pl_grib = Path("/mnt/d/Weer/Uitvoer/data/ecmwf/20261029_12z_oper_allvars/crop_nh_allvars/pl/test_formats/ecmwf_nh_pl_t_14levels.grib2")
+        data_root = Path(os.environ.get("WX1_DATA_ROOT", str(Path.home() / "wx1_data")))
+        sfc_grib = data_root / "ecmwf/20261029_12z_oper_allvars/crop_nh_allvars/sfc/test_formats/ecmwf_nh_sfc_2t.grib2"
+        pl_grib = data_root / "ecmwf/20261029_12z_oper_allvars/crop_nh_allvars/pl/test_formats/ecmwf_nh_pl_t_14levels.grib2"
 
     def load_grib(path):
         with open(path, "rb") as f:
@@ -592,7 +596,7 @@ def benchmark_r2_ablation(fs_mode="d_drive"):
     # 2. ECMWF NH Oper PL t14 (14x901x3600, 181.6 MB)
     # 3. KNMI Harmonie CY46 NL (12x390x390, 7.30 MB)
     if fs_mode == "ext4":
-        base_dir = Path("/home/j_ord/wx1_bench_ext4")
+        base_dir = EXT4_BENCH_DIR
         test_cases = [
             ("ecmwf_nh_sfc_2t", base_dir / "ecmwf_nh_sfc_2t_restart_lossless.wx1"),
             ("ecmwf_nh_pl_t14", base_dir / "ecmwf_nh_pl_t14_restart_lossless.wx1"),
@@ -703,7 +707,7 @@ def benchmark_adr0029_read_paths(fs_mode="d_drive"):
     print("=" * 70)
 
     if fs_mode == "ext4":
-        base_dir = Path("/home/j_ord/wx1_bench_ext4")
+        base_dir = EXT4_BENCH_DIR
         sfc_path = base_dir / "ecmwf_nh_sfc_2t_restart_lossless.wx1"
         sfc_grib = base_dir / "ecmwf_nh_sfc_2t.grib2"
         sfc_nc = base_dir / "ecmwf_nh_sfc_2t_zlib.nc"
@@ -1020,7 +1024,7 @@ def benchmark_write_and_scale_ext4(fs_mode="ext4") -> dict:
     print("PART 5: Write Paths (Durable vs Buffered, Append, W5 AsyncWriter) & 1M-Chunk Scale")
     print("=" * 70)
 
-    work_dir = Path("/home/j_ord/wx1_bench_ext4/write_bench") if fs_mode == "ext4" else Path("/mnt/d/Weer/Uitvoer/data/wx1_bench_scratch/write_bench")
+    work_dir = EXT4_BENCH_DIR / "write_bench" if fs_mode == "ext4" else Path(os.environ.get("WX1_SCRATCH", str(Path.home() / "wx1_bench_scratch"))) / "write_bench"
     work_dir.mkdir(parents=True, exist_ok=True)
 
     np.random.seed(7)
@@ -1119,7 +1123,7 @@ def generate_full_report(datasets, cross_lossy, intpack_res, ablation_res, read_
     if fs_mode == "ext4":
         report_file = Path("reports/fase4_onderdeel6_adr0029_ext4_report.md")
         fs_title = "WSL2 Native ext4 (/dev/sdd direct I/O)"
-        fs_ablation_desc = "uitgevoerd op de native ext4 partitie van WSL2 (/home/j_ord/wx1_bench_ext4):"
+        fs_ablation_desc = "uitgevoerd op de native ext4 partitie van WSL2 ($WX1_BENCH_DATA_DIR):"
     else:
         report_file = Path("reports/fase4_onderdeel6_adr0029_comprehensive_report.md")
         fs_title = "Windows D: Drive via WSL2 9P/DrvFs (/mnt/d)"

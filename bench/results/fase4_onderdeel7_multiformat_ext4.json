@@ -1,7 +1,7 @@
 {
   "timestamp": "2026-11-02T19:15:22.324606+00:00",
   "filesystem": "ext4 (/dev/sdd)",
-  "output_directory": "/home/j_ord/wx1_bench_ext4/multiformat_suite",
+  "output_directory": "/home/user/wx1_bench_ext4/multiformat_suite",
   "variables_tested": [
     {
       "variable": "2t",
@@ -1162,9 +1162,9 @@
       "format_id": "WX-1",
       "extension": ".wx1",
       "standard": "WX-1 Container v1 (Zstd+Shuffle)",
-      "source_file_on_ext4": "/home/j_ord/wx1_bench_ext4/multiformat_suite/all_15_formats/ecmwf_2t_native.wx1",
-      "wx1_file_on_ext4": "/home/j_ord/wx1_bench_ext4/multiformat_suite/all_15_formats/ecmwf_2t_native.wx1",
-      "roundtrip_file_on_ext4": "/home/j_ord/wx1_bench_ext4/multiformat_suite/all_15_formats/ecmwf_2t_native.wx1",
+      "source_file_on_ext4": "/home/user/wx1_bench_ext4/multiformat_suite/all_15_formats/ecmwf_2t_native.wx1",
+      "wx1_file_on_ext4": "/home/user/wx1_bench_ext4/multiformat_suite/all_15_formats/ecmwf_2t_native.wx1",
+      "roundtrip_file_on_ext4": "/home/user/wx1_bench_ext4/multiformat_suite/all_15_formats/ecmwf_2t_native.wx1",
       "shape": [
         261,
         661
@@ -1185,9 +1185,9 @@
       "format_id": "GRIB2",
       "extension": ".grib2",
       "standard": "WMO FM 92 GRIB Edition 2 (grid_ccsds)",
-      "source_file_on_ext4": "/home/j_ord/wx1_bench_ext4/multiformat_suite/all_15_formats/ecmwf_2t_roundtrip.grib2",
-      "wx1_file_on_ext4": "/home/j_ord/wx1_bench_ext4/multiformat_suite/all_15_formats/ecmwf_2t_from_grib.wx1",
-      "roundtrip_file_on_ext4": "/home/j_ord/wx1_bench_ext4/multiformat_suite/all_15_formats/ecmwf_2t_roundtrip.grib2",
+      "source_file_on_ext4": "/home/user/wx1_bench_ext4/multiformat_suite/all_15_formats/ecmwf_2t_roundtrip.grib2",
+      "wx1_file_on_ext4": "/home/user/wx1_bench_ext4/multiformat_suite/all_15_formats/ecmwf_2t_from_grib.wx1",
+      "roundtrip_file_on_ext4": "/home/user/wx1_bench_ext4/multiformat_suite/all_15_formats/ecmwf_2t_roundtrip.grib2",
       "shape": [
         261,
         661
@@ -1208,9 +1208,9 @@
       "format_id": "NetCDF-4",
       "extension": ".nc",
       "standard": "Unidata NetCDF-4 / HDF5 (zlib=4, shuffle=True)",
-      "source_file_on_ext4": "/home/j_ord/wx1_bench_ext4/multiformat_suite/all_15_formats/ecmwf_2t_netcdf4.nc",
-      "wx1_file_on_ext4": "/home/j_ord/wx1_bench_ext4/multiformat_suite/all_15_formats/ecmwf_2t_from_nc4.wx1",
-      "roundtrip_file_on_ext4": "/home/j_ord/wx1_bench_ext4/multiformat_suite/all_15_formats/ecmwf_2t_roundtrip.nc",
+      "source_file_on_ext4": "/home/user/wx1_bench_ext4/multiformat_suite/all_15_formats/ecmwf_2t_netcdf4.nc",
+      "wx1_file_on_ext4": "/home/user/wx1_bench_ext4/multiformat_suite/all_15_formats/ecmwf_2t_from_nc4.wx1",
+      "roundtrip_file_on_ext4": "/home/user/wx1_bench_ext4/multiformat_suite/all_15_formats/ecmwf_2t_roundtrip.nc",
       "shape": [
         261,
         661
@@ -1231,9 +1231,9 @@
       "format_id": "NetCDF-3",
       "extension": ".cdf",
       "standard": "Unidata Classic NetCDF (NETCDF3_64BIT_OFFSET)",
-      "source_file_on_ext4": "/home/j_ord/wx1_bench_ext4/multiformat_suite/all_15_formats/ecmwf_2t_classic.cdf",
-      "wx1_file_on_ext4": "/home/j_ord/wx1_bench_ext4/multiformat_suite/all_15_formats/ecmwf_2t_from_cdf.wx1",
-      "roundtrip_file_on_ext4": "/home/j_ord/wx1_bench_ext4/multiformat_suite/all_15_formats/ecmwf_2t_roundtrip.cdf",
+      "source_file_on_ext4": "/home/user/wx1_bench_ext4/multiformat_suite/all_15_formats/ecmwf_2t_classic.cdf",
+      "wx1_file_on_ext4": "/home/user/wx1_bench_ext4/multiformat_suite/all_15_formats/ecmwf_2t_from_cdf.wx1",
+      "roundtrip_file_on_ext4": "/home/user/wx1_bench_ext4/multiformat_suite/all_15_formats/ecmwf_2t_roundtrip.cdf",
       "shape": [
         261,
         661
@@ -1254,9 +1254,9 @@
       "format_id": "Zarr v3",
       "extension": ".zarr",
       "standard": "Zarr v3 Specification (`zarr.json` + Blosc/Zstd)",
-      "source_file_on_ext4": "/home/j_ord/wx1_bench_ext4/multiformat_suite/all_15_formats/ecmwf_2t.zarr",
-      "wx1_file_on_ext4": "/home/j_ord/wx1_bench_ext4/multiformat_suite/all_15_formats/ecmwf_2t_from_zarr.wx1",
-      "roundtrip_file_on_ext4": "/home/j_ord/wx1_bench_ext4/multiformat_suite/all_15_formats/ecmwf_2t_roundtrip.zarr",
+      "source_file_on_ext4": "/home/user/wx1_bench_ext4/multiformat_suite/all_15_formats/ecmwf_2t.zarr",
+      "wx1_file_on_ext4": "/home/user/wx1_bench_ext4/multiformat_suite/all_15_formats/ecmwf_2t_from_zarr.wx1",
+      "roundtrip_file_on_ext4": "/home/user/wx1_bench_ext4/multiformat_suite/all_15_formats/ecmwf_2t_roundtrip.zarr",
       "shape": [
         261,
         661
@@ -1277,9 +1277,9 @@
       "format_id": "HDF5 (.h5)",
       "extension": ".h5",
       "standard": "HDF5 Hierarchical Data Format v5 (gzip+shuffle)",
-      "source_file_on_ext4": "/home/j_ord/wx1_bench_ext4/multiformat_suite/all_15_formats/ecmwf_2t.h5",
-      "wx1_file_on_ext4": "/home/j_ord/wx1_bench_ext4/multiformat_suite/all_15_formats/ecmwf_2t_from_h5.wx1",
-      "roundtrip_file_on_ext4": "/home/j_ord/wx1_bench_ext4/multiformat_suite/all_15_formats/ecmwf_2t_roundtrip.h5",
+      "source_file_on_ext4": "/home/user/wx1_bench_ext4/multiformat_suite/all_15_formats/ecmwf_2t.h5",
+      "wx1_file_on_ext4": "/home/user/wx1_bench_ext4/multiformat_suite/all_15_formats/ecmwf_2t_from_h5.wx1",
+      "roundtrip_file_on_ext4": "/home/user/wx1_bench_ext4/multiformat_suite/all_15_formats/ecmwf_2t_roundtrip.h5",
       "shape": [
         261,
         661
@@ -1300,9 +1300,9 @@
       "format_id": "HDF5 (.hdf5)",
       "extension": ".hdf5",
       "standard": "HDF5 3D Upper-Air Volume (14 levels, gzip+shuffle)",
-      "source_file_on_ext4": "/home/j_ord/wx1_bench_ext4/multiformat_suite/all_15_formats/ecmwf_t14_3d.hdf5",
-      "wx1_file_on_ext4": "/home/j_ord/wx1_bench_ext4/multiformat_suite/all_15_formats/ecmwf_t14_from_hdf5.wx1",
-      "roundtrip_file_on_ext4": "/home/j_ord/wx1_bench_ext4/multiformat_suite/all_15_formats/ecmwf_t14_roundtrip.hdf5",
+      "source_file_on_ext4": "/home/user/wx1_bench_ext4/multiformat_suite/all_15_formats/ecmwf_t14_3d.hdf5",
+      "wx1_file_on_ext4": "/home/user/wx1_bench_ext4/multiformat_suite/all_15_formats/ecmwf_t14_from_hdf5.wx1",
+      "roundtrip_file_on_ext4": "/home/user/wx1_bench_ext4/multiformat_suite/all_15_formats/ecmwf_t14_roundtrip.hdf5",
       "shape": [
         14,
         261,
@@ -1324,9 +1324,9 @@
       "format_id": "ODIM_H5",
       "extension": ".odim.h5",
       "standard": "EUMETNET OPERA Radar ODIM_H5 (ODIM_H5/V2_0)",
-      "source_file_on_ext4": "/home/j_ord/wx1_bench_ext4/input_sources/real_radar/knmi_polar_volume.h5",
-      "wx1_file_on_ext4": "/home/j_ord/wx1_bench_ext4/multiformat_suite/all_15_formats/knmi_radar_from_odim.wx1",
-      "roundtrip_file_on_ext4": "/home/j_ord/wx1_bench_ext4/multiformat_suite/all_15_formats/knmi_radar_roundtrip.odim.h5",
+      "source_file_on_ext4": "/home/user/wx1_bench_ext4/input_sources/real_radar/knmi_polar_volume.h5",
+      "wx1_file_on_ext4": "/home/user/wx1_bench_ext4/multiformat_suite/all_15_formats/knmi_radar_from_odim.wx1",
+      "roundtrip_file_on_ext4": "/home/user/wx1_bench_ext4/multiformat_suite/all_15_formats/knmi_radar_roundtrip.odim.h5",
       "shape": [
         360,
         320
@@ -1347,9 +1347,9 @@
       "format_id": "HDF4 (.hdf)",
       "extension": ".hdf",
       "standard": "NCSA/NASA Classic HDF4 v4.2 Scientific Data Set (DEFLATE)",
-      "source_file_on_ext4": "/home/j_ord/wx1_bench_ext4/multiformat_suite/all_15_formats/ecmwf_2t_hdf4.hdf",
-      "wx1_file_on_ext4": "/home/j_ord/wx1_bench_ext4/multiformat_suite/all_15_formats/ecmwf_2t_from_hdf4.wx1",
-      "roundtrip_file_on_ext4": "/home/j_ord/wx1_bench_ext4/multiformat_suite/all_15_formats/ecmwf_2t_roundtrip.hdf",
+      "source_file_on_ext4": "/home/user/wx1_bench_ext4/multiformat_suite/all_15_formats/ecmwf_2t_hdf4.hdf",
+      "wx1_file_on_ext4": "/home/user/wx1_bench_ext4/multiformat_suite/all_15_formats/ecmwf_2t_from_hdf4.wx1",
+      "roundtrip_file_on_ext4": "/home/user/wx1_bench_ext4/multiformat_suite/all_15_formats/ecmwf_2t_roundtrip.hdf",
       "shape": [
         261,
         661
@@ -1370,9 +1370,9 @@
       "format_id": "BUFR",
       "extension": ".bufr",
       "standard": "WMO FM 94 BUFR Edition 4 (1 message, 1000 SYNOP station subsets)",
-      "source_file_on_ext4": "/home/j_ord/wx1_bench_ext4/multiformat_suite/all_15_formats/ecmwf_synop_1000stations.bufr",
-      "wx1_file_on_ext4": "/home/j_ord/wx1_bench_ext4/multiformat_suite/all_15_formats/ecmwf_synop_from_bufr.wx1",
-      "roundtrip_file_on_ext4": "/home/j_ord/wx1_bench_ext4/multiformat_suite/all_15_formats/ecmwf_synop_roundtrip.bufr",
+      "source_file_on_ext4": "/home/user/wx1_bench_ext4/multiformat_suite/all_15_formats/ecmwf_synop_1000stations.bufr",
+      "wx1_file_on_ext4": "/home/user/wx1_bench_ext4/multiformat_suite/all_15_formats/ecmwf_synop_from_bufr.wx1",
+      "roundtrip_file_on_ext4": "/home/user/wx1_bench_ext4/multiformat_suite/all_15_formats/ecmwf_synop_roundtrip.bufr",
       "shape": [
         1000,
         6
@@ -1393,9 +1393,9 @@
       "format_id": "CREX",
       "extension": ".crex",
       "standard": "WMO FM 95 CREX Edition 2 (`++CREX++ ... 7777`)",
-      "source_file_on_ext4": "/home/j_ord/wx1_bench_ext4/multiformat_suite/all_15_formats/ecmwf_synop_1000stations.crex",
-      "wx1_file_on_ext4": "/home/j_ord/wx1_bench_ext4/multiformat_suite/all_15_formats/ecmwf_synop_from_crex.wx1",
-      "roundtrip_file_on_ext4": "/home/j_ord/wx1_bench_ext4/multiformat_suite/all_15_formats/ecmwf_synop_roundtrip.crex",
+      "source_file_on_ext4": "/home/user/wx1_bench_ext4/multiformat_suite/all_15_formats/ecmwf_synop_1000stations.crex",
+      "wx1_file_on_ext4": "/home/user/wx1_bench_ext4/multiformat_suite/all_15_formats/ecmwf_synop_from_crex.wx1",
+      "roundtrip_file_on_ext4": "/home/user/wx1_bench_ext4/multiformat_suite/all_15_formats/ecmwf_synop_roundtrip.crex",
       "shape": [
         1000,
         6
@@ -1416,9 +1416,9 @@
       "format_id": "PP Format",
       "extension": ".pp",
       "standard": "UK Met Office UM Post-Processing Format (64-word big-endian Lookup)",
-      "source_file_on_ext4": "/home/j_ord/wx1_bench_ext4/multiformat_suite/all_15_formats/ukmo_ecmwf_2t.pp",
-      "wx1_file_on_ext4": "/home/j_ord/wx1_bench_ext4/multiformat_suite/all_15_formats/ukmo_ecmwf_2t_from_pp.wx1",
-      "roundtrip_file_on_ext4": "/home/j_ord/wx1_bench_ext4/multiformat_suite/all_15_formats/ukmo_ecmwf_2t_roundtrip.pp",
+      "source_file_on_ext4": "/home/user/wx1_bench_ext4/multiformat_suite/all_15_formats/ukmo_ecmwf_2t.pp",
+      "wx1_file_on_ext4": "/home/user/wx1_bench_ext4/multiformat_suite/all_15_formats/ukmo_ecmwf_2t_from_pp.wx1",
+      "roundtrip_file_on_ext4": "/home/user/wx1_bench_ext4/multiformat_suite/all_15_formats/ukmo_ecmwf_2t_roundtrip.pp",
       "shape": [
         261,
         661
@@ -1439,9 +1439,9 @@
       "format_id": "NIMROD",
       "extension": ".nimrod",
       "standard": "UK Met Office NIMROD Gridded Radar Format (512-byte big-endian header)",
-      "source_file_on_ext4": "/home/j_ord/wx1_bench_ext4/multiformat_suite/all_15_formats/ukmo_radar_dbz.nimrod",
-      "wx1_file_on_ext4": "/home/j_ord/wx1_bench_ext4/multiformat_suite/all_15_formats/ukmo_radar_from_nimrod.wx1",
-      "roundtrip_file_on_ext4": "/home/j_ord/wx1_bench_ext4/multiformat_suite/all_15_formats/ukmo_radar_roundtrip.nimrod",
+      "source_file_on_ext4": "/home/user/wx1_bench_ext4/multiformat_suite/all_15_formats/ukmo_radar_dbz.nimrod",
+      "wx1_file_on_ext4": "/home/user/wx1_bench_ext4/multiformat_suite/all_15_formats/ukmo_radar_from_nimrod.wx1",
+      "roundtrip_file_on_ext4": "/home/user/wx1_bench_ext4/multiformat_suite/all_15_formats/ukmo_radar_roundtrip.nimrod",
       "shape": [
         360,
         320
@@ -1462,9 +1462,9 @@
       "format_id": "DORADE",
       "extension": ".dorade",
       "standard": "NCAR DORADE Sweepfile (`SSWB`/`VOLD`/`RADD`/`PARM`/`CELV`/`SWIB`/`RYIB`/`ASIB`/`RDAT`)",
-      "source_file_on_ext4": "/home/j_ord/wx1_bench_ext4/multiformat_suite/all_15_formats/ncar_radar_sweep.dorade",
-      "wx1_file_on_ext4": "/home/j_ord/wx1_bench_ext4/multiformat_suite/all_15_formats/ncar_radar_from_dorade.wx1",
-      "roundtrip_file_on_ext4": "/home/j_ord/wx1_bench_ext4/multiformat_suite/all_15_formats/ncar_radar_roundtrip.dorade",
+      "source_file_on_ext4": "/home/user/wx1_bench_ext4/multiformat_suite/all_15_formats/ncar_radar_sweep.dorade",
+      "wx1_file_on_ext4": "/home/user/wx1_bench_ext4/multiformat_suite/all_15_formats/ncar_radar_from_dorade.wx1",
+      "roundtrip_file_on_ext4": "/home/user/wx1_bench_ext4/multiformat_suite/all_15_formats/ncar_radar_roundtrip.dorade",
       "shape": [
         360,
         320
@@ -1485,9 +1485,9 @@
       "format_id": "IWRF",
       "extension": ".iwrf",
       "standard": "NCAR Integrated Weather Radar Format (`0x77770001`..`0x77770003` packets)",
-      "source_file_on_ext4": "/home/j_ord/wx1_bench_ext4/multiformat_suite/all_15_formats/ncar_radar_ts.iwrf",
-      "wx1_file_on_ext4": "/home/j_ord/wx1_bench_ext4/multiformat_suite/all_15_formats/ncar_radar_from_iwrf.wx1",
-      "roundtrip_file_on_ext4": "/home/j_ord/wx1_bench_ext4/multiformat_suite/all_15_formats/ncar_radar_roundtrip.iwrf",
+      "source_file_on_ext4": "/home/user/wx1_bench_ext4/multiformat_suite/all_15_formats/ncar_radar_ts.iwrf",
+      "wx1_file_on_ext4": "/home/user/wx1_bench_ext4/multiformat_suite/all_15_formats/ncar_radar_from_iwrf.wx1",
+      "roundtrip_file_on_ext4": "/home/user/wx1_bench_ext4/multiformat_suite/all_15_formats/ncar_radar_roundtrip.iwrf",
       "shape": [
         360,
         320
@@ -1508,9 +1508,9 @@
       "format_id": "GeoTIFF",
       "extension": ".tif",
       "standard": "OGC GeoTIFF (Zstd + Horizontal Floating-Point Predictor)",
-      "source_file_on_ext4": "/home/j_ord/wx1_bench_ext4/multiformat_suite/all_15_formats/ecmwf_2t_geotiff.tif",
-      "wx1_file_on_ext4": "/home/j_ord/wx1_bench_ext4/multiformat_suite/all_15_formats/ecmwf_2t_from_tif.wx1",
-      "roundtrip_file_on_ext4": "/home/j_ord/wx1_bench_ext4/multiformat_suite/all_15_formats/ecmwf_2t_roundtrip.tif",
+      "source_file_on_ext4": "/home/user/wx1_bench_ext4/multiformat_suite/all_15_formats/ecmwf_2t_geotiff.tif",
+      "wx1_file_on_ext4": "/home/user/wx1_bench_ext4/multiformat_suite/all_15_formats/ecmwf_2t_from_tif.wx1",
+      "roundtrip_file_on_ext4": "/home/user/wx1_bench_ext4/multiformat_suite/all_15_formats/ecmwf_2t_roundtrip.tif",
       "shape": [
         261,
         661

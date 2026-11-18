@@ -56,7 +56,7 @@ Gemeten met de `zstd 0.13`-crate (libzstd 1.5.7) en gevectoriseerde 2D prefix-su
 | `ecmwf_nh_pl_t14` | `2d_plane` | 19 | **1.296** | 24.7x | 6.9 MB/s | **128.3 MB/s** | 1.761 | **-26.4%** |
 
 ## 4. R2 Ablatiestudie op 3 Volledige Datasets (Punt 7 & 8)
-Linux-paginacache geleegd via `posix_fadvise(POSIX_FADV_DONTNEED)`. De 4 componenten van R2 (descriptorhergebruik, parallelle `std::thread::scope`-decompressie, direct memory placement `copy_intersection`, en software slice-by-8 `crc32c`) zijn uitgevoerd op de native ext4 partitie van WSL2 (/home/j_ord/wx1_bench_ext4):
+Linux-paginacache geleegd via `posix_fadvise(POSIX_FADV_DONTNEED)`. De 4 componenten van R2 (descriptorhergebruik, parallelle `std::thread::scope`-decompressie, direct memory placement `copy_intersection`, en software slice-by-8 `crc32c`) zijn uitgevoerd op de native ext4 partitie van WSL2 (/home/user/wx1_bench_ext4):
 
 | Dataset (Volledig) | Basis (Alle 4 Opts) | Zonder Descriptor Cache | Seriële Single-Thread (`std::thread::scope` uit) | `copy_intersection` Winst | Software Slice-by-8 `crc32c` Tijd |
 | :--- | :---: | :---: | :---: | :---: | :---: |

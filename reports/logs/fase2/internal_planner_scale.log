@@ -2,10 +2,10 @@
 Loadavg before:
 0.31 0.21 0.22 1/260 9157
 --- Building optimized benchmark binary ---
-   Compiling wx1-format v0.1.0 (/mnt/d/AI/weer-ai/Tempest/WX-1/crates/wx1-format)
+   Compiling wx1-format v0.1.0 (<repo_root>/crates/wx1-format)
     Finished `bench` profile [optimized] target(s) in 3.51s
-  Executable benches/wx1_performance.rs (/home/j_ord/WX-1-TESTS/target/release/deps/wx1_performance-e68c56dee41b9f7a)
-Benchmark binary: /home/j_ord/WX-1-TESTS/target/release/deps/wx1_performance-e68c56dee41b9f7a
+  Executable benches/wx1_performance.rs (/home/user/WX-1-TESTS/target/release/deps/wx1_performance-e68c56dee41b9f7a)
+Benchmark binary: /home/user/WX-1-TESTS/target/release/deps/wx1_performance-e68c56dee41b9f7a
 --- 1. Case: planner (4096 chunks snapshot baseline) ---
 case=planner dimensions=2048x2048 chunks=4096 chunk_shape=32x32 selection=256x256 selected_chunks=81 open_validate_ms=73.140 plan_median_ns=7213 plans_per_repetition=200 selection_read_median_ms=1.136 selection_read_mib_s=220.00 peak_rss_mib=21.4
 --- 2. Case: planner-scale-4096 (validated in-memory) ---

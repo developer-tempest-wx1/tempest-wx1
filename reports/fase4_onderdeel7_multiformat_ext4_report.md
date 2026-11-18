@@ -1,6 +1,6 @@
 # WX-1 Uitgebreid 15-Formaten & Wetenschappelijke Gegevenstypen Rapport [WSL2 Native ext4]
 **Datum**: 2026-11-02 20:15:22 CET  
-**Filesysteem**: WSL2 Native ext4 (`/dev/sdd`, `/home/j_ord/wx1_bench_ext4/multiformat_suite/`)  
+**Filesysteem**: WSL2 Native ext4 (`/dev/sdd`, `/home/user/wx1_bench_ext4/multiformat_suite/`)  
 **Geteste Formaten (15 formaten / 16 extensies)**: `.wx1`, `.grib2` (`grid_ccsds`), `.nc` (NetCDF-4 `zlib+shuffle`), `.cdf` (NetCDF-3 Classic 64-bit), `.zarr` (Zarr v3), `.h5`, `.hdf5`, `.odim.h5` (`ODIM_H5/V2_4`), `.hdf` (HDF4 `pyhdf.SD`), `.bufr` (WMO FM 94 Edition 4), `.crex` (WMO FM 95 Edition 2), `.pp` (UKMO PP), `.nimrod` (UKMO NIMROD), `.dorade` (NCAR DORADE), `.iwrf` (NCAR IWRF), `.tif` (GeoTIFF)  
 
 ## 1. Deel 1: Eerlijke Formaatvergelijking over 13 Meteorologische Variabelen (Inclusief 50-Member Ensemble `enfo_2t`)
@@ -34,7 +34,7 @@ Alle eerdere methodologische fouten zijn gecorrigeerd en geverifieerd:
   - Aantal ruimte-fillpixels (`65535`): **10,606,713** pixels — **100% bit-exact maskerbehoud (`fill_mask_exact_match = True`)**.
 
 ## 2. Deel 2: Volledige Benchmark van Alle 15 Meteorologische & Wetenschappelijke Bestandsformaten op ext4
-Elk formaat is fysiek aangemaakt op `/home/j_ord/wx1_bench_ext4/multiformat_suite/all_15_formats/` vanuit onze ECMWF, KNMI en EUMETSAT runs, geconverteerd naar `.wx1`, en terug geëxporteerd naar het doelformaat:
+Elk formaat is fysiek aangemaakt op `/home/user/wx1_bench_ext4/multiformat_suite/all_15_formats/` vanuit onze ECMWF, KNMI en EUMETSAT runs, geconverteerd naar `.wx1`, en terug geëxporteerd naar het doelformaat:
 
 | Formaat | Extensie | Standaard / Specificatie | Vorm & Type | Bestandsgrootte (B) | WX-1 Grootte (B) | Import $\rightarrow$ WX-1 (ms) | Export $\leftarrow$ WX-1 (ms) | Roundtrip $E_{\max}$ | Verificatie & SHA-256 |
 | :--- | :---: | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :--- |

@@ -7,7 +7,7 @@
    NetCDF-4 (`zlib=True, shuffle=True, complevel=4`, verified with `ncdump -hs`), Zarr v3, and WX-1.
    Reports both Ratio vs Raw AND Ratio vs Best Competitor, plus key-by-key metadata equality.
 2. Physically creates, converts to `.wx1`, and roundtrips back all 15 requested meteorological
-   and scientific file formats on `/home/j_ord/wx1_bench_ext4/multiformat_suite/` derived from
+   and scientific file formats in `$WX1_BENCH_DATA_DIR/multiformat_suite/` derived from
    our ECMWF, KNMI HARM46, and EUMETSAT runs:
    - `.wx1` (WX-1 Native Container)
    - `.grib2` (WMO FM 92 GRIB2 `grid_ccsds`)
@@ -47,7 +47,7 @@ from pyhdf.SD import SD, SDC
 
 import wx1
 
-BENCH_EXT4_DIR = Path("/home/j_ord/wx1_bench_ext4")
+BENCH_EXT4_DIR = Path(os.environ.get("WX1_BENCH_DATA_DIR", str(Path.home() / "wx1_bench_ext4")))
 INPUT_DIR = BENCH_EXT4_DIR / "input_sources"
 OUTPUT_DIR = BENCH_EXT4_DIR / "multiformat_suite"
 
@@ -517,7 +517,7 @@ def run_15_format_suite() -> list[dict]:
 
     # 8. ODIM_H5 (.odim.h5 — EUMETNET OPERA Weather Radar Data Information Model v2.0/v2.4)
     # Using authentic KNMI Den Helder polar volume scan (ODIM_H5)
-    real_knmi_radar = Path("/home/j_ord/wx1_bench_ext4/input_sources/real_radar/knmi_polar_volume.h5")
+    real_knmi_radar = BENCH_EXT4_DIR / "input_sources/real_radar/knmi_polar_volume.h5"
     p_odim_wx1 = fmt_dir / "knmi_radar_from_odim.wx1"
     p_odim_rt = fmt_dir / "knmi_radar_roundtrip.odim.h5"
 
@@ -782,7 +782,7 @@ def main():
     report_lines = [
         "# WX-1 Uitgebreid 15-Formaten & Wetenschappelijke Gegevenstypen Rapport [WSL2 Native ext4]",
         f"**Datum**: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')} CET  ",
-        "**Filesysteem**: WSL2 Native ext4 (`/dev/sdd`, `/home/j_ord/wx1_bench_ext4/multiformat_suite/`)  ",
+        "**Filesysteem**: WSL2 Native ext4 (`~/wx1_bench_ext4/multiformat_suite/`)  ",
         "**Geteste Formaten (15 formaten / 16 extensies)**: `.wx1`, `.grib2` (`grid_ccsds`), `.nc` (NetCDF-4 `zlib+shuffle`), `.cdf` (NetCDF-3 Classic 64-bit), `.zarr` (Zarr v3), `.h5`, `.hdf5`, `.odim.h5` (`ODIM_H5/V2_4`), `.hdf` (HDF4 `pyhdf.SD`), `.bufr` (WMO FM 94 Edition 4), `.crex` (WMO FM 95 Edition 2), `.pp` (UKMO PP), `.nimrod` (UKMO NIMROD), `.dorade` (NCAR DORADE), `.iwrf` (NCAR IWRF), `.tif` (GeoTIFF)  \n",
         "## 1. Deel 1: Eerlijke Formaatvergelijking over 13 Meteorologische Variabelen (Inclusief 50-Member Ensemble `enfo_2t`)",
         "Alle eerdere methodologische fouten zijn gecorrigeerd en geverifieerd:",
@@ -817,7 +817,7 @@ def main():
         f"  - `scale_factor = {olr_v['scale_factor']}`, `add_offset = {olr_v['add_offset']}`, `_FillValue = {olr_v['_FillValue']}`.",
         f"  - Aantal ruimte-fillpixels (`65535`): **{olr_v['fill_pixel_count']:,d}** pixels — **100% bit-exact maskerbehoud (`fill_mask_exact_match = {olr_v['fill_mask_exact_match']}`)**.\n",
         "## 2. Deel 2: Volledige Benchmark van Alle 15 Meteorologische & Wetenschappelijke Bestandsformaten op ext4",
-        "Elk formaat is fysiek aangemaakt op `/home/j_ord/wx1_bench_ext4/multiformat_suite/all_15_formats/` vanuit onze ECMWF, KNMI en EUMETSAT runs, geconverteerd naar `.wx1`, en terug geëxporteerd naar het doelformaat:\n",
+        "Elk formaat is fysiek aangemaakt onder `$WX1_BENCH_DATA_DIR/multiformat_suite/all_15_formats/` vanuit onze ECMWF, KNMI en EUMETSAT runs, geconverteerd naar `.wx1`, en terug geëxporteerd naar het doelformaat:\n",
         "| Formaat | Extensie | Standaard / Specificatie | Vorm & Type | Bestandsgrootte (B) | WX-1 Grootte (B) | Import $\\rightarrow$ WX-1 (ms) | Export $\\leftarrow$ WX-1 (ms) | Roundtrip $E_{\\max}$ | Verificatie & SHA-256 |",
         "| :--- | :---: | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :--- |",
     ])

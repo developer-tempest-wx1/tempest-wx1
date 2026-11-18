@@ -20,8 +20,8 @@ import numpy as np
 import eccodes
 import wx1
 
-DATA_DIR = Path("/mnt/d/Weer/Uitvoer/data/era5/sfc")
-RESULTS_DIR = Path("/mnt/d/AI/weer-ai/Tempest/WX-1/bench/results")
+DATA_DIR = Path(__file__).resolve().parents[2] / "data" / "era5" / "sfc"
+RESULTS_DIR = Path(__file__).resolve().parents[2] / "bench" / "results"
 
 
 def main():

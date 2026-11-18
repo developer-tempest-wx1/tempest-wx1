@@ -2,9 +2,9 @@
 
 - **Datum:** 2026-11-02
 - **Huidige fase:** Fase 4 (Onderdeel 1: ADR 0028 + Onderdeel 2: ADR 0024 Lossy Quantisatie & Byte-Shuffle) VOLTOOID & GEVALIDEERD.
-- **Projectlocatie:** `/mnt/d/AI/weer-ai/Tempest/WX-1`
-- **Test- en scratchlocatie (ext4):** `/home/j_ord/WX-1-TESTS`
-- **Conda-omgeving:** `Tempest` (`/home/j_ord/miniconda3/envs/Tempest`, Python 3.12.16)
+- **Projectlocatie:** `<repo_root>`
+- **Test- en scratchlocatie (ext4):** `/home/user/WX-1-TESTS`
+- **Conda-omgeving:** `Tempest` (`/home/user/miniconda3/envs/Tempest`, Python 3.12.16)
 - **Rust toolchain:** rustc 1.99.1, cargo 1.99.1
 - **GPU:** NVIDIA GeForce RTX 3060 Laptop GPU (6144 MiB VRAM), driver 615.78.05
 - **acceptance.yaml SHA256:** `faa17ac1919a333ae873140272a93161af96508d914475cf600725270793fdb7` (onveranderd)
