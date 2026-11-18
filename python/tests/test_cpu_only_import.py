@@ -22,6 +22,15 @@ import sys
 
 def test_python_package_import_does_not_import_optional_or_gpu_stack():
     package_root = Path(__file__).resolve().parents[1]
+    search_paths = [str(package_root)]
+    try:
+        import wx1 as _installed_wx1
+
+        installed_root = str(Path(_installed_wx1.__file__).resolve().parents[1])
+        if installed_root not in search_paths:
+            search_paths.append(installed_root)
+    except Exception:
+        pass
     script = r'''
 import importlib.abc
 import sys
@@ -45,7 +54,7 @@ assert "torch" not in sys.modules
 print("OK: wx1 package imported without optional scientific or GPU modules")
 '''
     env = os.environ.copy()
-    env["PYTHONPATH"] = str(package_root)
+    env["PYTHONPATH"] = os.pathsep.join(search_paths)
     result = subprocess.run(
         [sys.executable, "-S", "-c", script],
         env=env,

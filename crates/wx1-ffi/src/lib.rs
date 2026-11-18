@@ -505,8 +505,10 @@ mod tests {
         assert_eq!(err, wx1_error_t::WX1_OK);
         assert_eq!(bytes_written, 1024);
 
-        let (chunks, _) = buffer.as_chunks::<4>();
-        let f32_vals: Vec<f32> = chunks.iter().map(|b| f32::from_le_bytes(*b)).collect();
+        let f32_vals: Vec<f32> = buffer
+            .chunks_exact(4)
+            .map(|b| f32::from_le_bytes([b[0], b[1], b[2], b[3]]))
+            .collect();
         assert_eq!(f32_vals.len(), 256);
         assert!((f32_vals[0] - 273.15).abs() < 1e-4);
 
