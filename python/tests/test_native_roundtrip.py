@@ -87,8 +87,8 @@ def test_native_xarray_dask_chunked_read_and_reduction(tmp_path):
 
     dataset = wx1.open_dataset(path, chunks={"time": 1, "y": 3, "x": 2})
     try:
-        assert isinstance(dataset["/temperature"].data, da.Array)
-        actual = dataset["/temperature"].mean().compute().item()
+        assert isinstance(dataset["temperature"].data, da.Array)
+        actual = dataset["temperature"].mean().compute().item()
         assert actual == pytest.approx(float(source.mean()))
     finally:
         dataset.close()

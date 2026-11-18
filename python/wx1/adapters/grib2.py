@@ -136,7 +136,7 @@ def open_dataset(path, *, filter_by_keys=None, indexpath="", **kwargs):
     try:
         import cfgrib  # noqa: F401
     except ImportError as exc:
-        raise ImportError("GRIB2 adapter requires cfgrib and ecCodes") from exc
+        raise ImportError("GRIB2 adapter requires the 'grib2' extra (cfgrib and ecCodes)") from exc
     backend_kwargs = {"indexpath": indexpath}
     if filter_by_keys is not None:
         backend_kwargs["filter_by_keys"] = dict(filter_by_keys)

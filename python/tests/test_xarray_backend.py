@@ -75,9 +75,9 @@ def test_xarray_materialization_is_lazy_and_reads_only_selection(monkeypatch, tm
     try:
         assert native.calls == []
         assert dataset.attrs["wx1_dataset_id"] == "xarray-fixture"
-        assert dataset["/temperature"].attrs["units"] == "K"
+        assert dataset["temperature"].attrs["units"] == "K"
 
-        result = dataset["/temperature"].isel(y=slice(1, 3), x=slice(0, 2)).values
+        result = dataset["temperature"].isel(y=slice(1, 3), x=slice(0, 2)).values
 
         np.testing.assert_array_equal(result, native.data[1:3, 0:2])
         assert native.calls == [((1, 0), (2, 2))]
@@ -123,8 +123,8 @@ def test_dask_chunked_execution_when_optional_dependency_is_installed(monkeypatc
         chunks={"y": 2, "x": 2},
     )
     try:
-        assert hasattr(dataset["/temperature"].data, "compute")
-        result = dataset["/temperature"].mean().compute().item()
+        assert hasattr(dataset["temperature"].data, "compute")
+        result = dataset["temperature"].mean().compute().item()
         assert result == pytest.approx(float(native.data.mean()))
     finally:
         dataset.close()
@@ -135,7 +135,7 @@ def test_xarray_strided_and_reverse_slices_read_only_bounding_region(monkeypatch
     monkeypatch.setattr(backend, "open_file", lambda path: wx1.Wx1File(native))
     dataset = backend.Wx1BackendEntrypoint().open_dataset(tmp_path / "fixture.wx1")
     try:
-        actual = dataset["/temperature"].isel(y=slice(None, None, -1), x=slice(1, None, 2)).values
+        actual = dataset["temperature"].isel(y=slice(None, None, -1), x=slice(1, None, 2)).values
         expected = native.data[::-1, 1::2]
         np.testing.assert_array_equal(actual, expected)
         # The backend reads one bounding rectangle and applies strides in memory.
@@ -149,7 +149,7 @@ def test_xarray_negative_integer_index_is_supported(monkeypatch, tmp_path):
     monkeypatch.setattr(backend, "open_file", lambda path: wx1.Wx1File(native))
     dataset = backend.Wx1BackendEntrypoint().open_dataset(tmp_path / "fixture.wx1")
     try:
-        actual = dataset["/temperature"].isel(y=-1).values
+        actual = dataset["temperature"].isel(y=-1).values
         np.testing.assert_array_equal(actual, native.data[-1, :])
     finally:
         dataset.close()
