@@ -1,12 +1,12 @@
 # WX-1: Open Scientific & Meteorological Container Format
 
-[![PyPI](https://img.shields.io/badge/pypi-v0.1.6-blue.svg)](https://pypi.org/project/tempest-wx1/)
+[![PyPI](https://img.shields.io/badge/pypi-v0.1.7-blue.svg)](https://pypi.org/project/tempest-wx1/)
 [![Python](https://img.shields.io/badge/python-3.10%20%7C%203.11%20%7C%203.12%20%7C%203.13-blue.svg)](https://pypi.org/project/tempest-wx1/)
 [![Rust](https://img.shields.io/badge/rust-1.85%2B-lightgrey.svg)](https://www.rust-lang.org)
 [![Safety](https://img.shields.io/badge/unsafe-forbidden-success.svg)](https://github.com/rust-lang/rfcs)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 
-**WX-1** (`tempest-wx1` v0.1.6) is a scientific storage container format engineered for numerical weather prediction (NWP), climate reanalysis (ERA5), and AI-driven weather modeling.
+**WX-1** (`tempest-wx1` v0.1.7) is a scientific storage container format engineered for numerical weather prediction (NWP), climate reanalysis (ERA5), and AI-driven weather modeling.
 
 It is written in safe Rust (`#![forbid(unsafe_code)]`), featuring a stable C-ABI (`include/wx1.h`), Python PyO3 bindings, an `xarray` backend engine (`engine="wx1"`), and bidirectional adapters for WMO GRIB Edition 1 & 2, NetCDF-4 (HDF5), and Zarr v2/v3.
 

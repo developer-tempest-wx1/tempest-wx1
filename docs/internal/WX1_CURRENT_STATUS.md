@@ -2,7 +2,7 @@
 
 **Status Date:** 2026-11-18  
 **Current Releases:**
-- `tempest-wx1` `v0.1.6` ([GitHub](https://github.com/developer-tempest-wx1/tempest-wx1), [PyPI](https://pypi.org/project/tempest-wx1/)) — Rust core (`wx1-format`, `wx1-registry`, `wx1-ffi`, `wx1-cli`) + Python bindings (`wx1`, `engine="wx1"`)
+- `tempest-wx1` `v0.1.7` ([GitHub](https://github.com/developer-tempest-wx1/tempest-wx1), [PyPI](https://pypi.org/project/tempest-wx1/)) — Rust core (`wx1-format`, `wx1-registry`, `wx1-ffi`, `wx1-cli`) + Python bindings (`wx1`, `engine="wx1"`)
 - `wx1-lorenzo` `v0.1.1` ([GitHub](https://github.com/developer-tempest-wx1/wx1-lorenzo), [PyPI](https://pypi.org/project/wx1-lorenzo/)) — Standalone native Zarr v3 `ArrayArrayCodec` (`wx1.lorenzo2d`)
 
 For installation instructions, API examples, and benchmark tables, see [README.md](../../README.md) and [docs/WX1_TECHNICAL_EVALUATION_KNMI_ECMWF.md](../WX1_TECHNICAL_EVALUATION_KNMI_ECMWF.md).

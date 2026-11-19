@@ -43,7 +43,7 @@ try:
     from importlib.metadata import version as _get_version
     __version__ = _get_version("tempest-wx1")
 except Exception:
-    __version__ = "0.1.6"
+    __version__ = "0.1.7"
 
 __all__ = [
     "__version__",

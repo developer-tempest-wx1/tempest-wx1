@@ -21,6 +21,7 @@ with metadata preservation, and export from WX-1 containers back to NetCDF-4 fil
 from __future__ import annotations
 
 import datetime
+import warnings
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
@@ -112,6 +113,18 @@ def from_netcdf(
             # Prefer multidimensional variables over 1D coordinate variables
             multi_dim_vars = [k for k in var_names if ds.variables[k].ndim >= 2]
             selected_var_name = multi_dim_vars[0] if multi_dim_vars else var_names[0]
+            # from_netcdf imports exactly one variable per call. Never drop data silently.
+            dropped = [k for k in multi_dim_vars if k != selected_var_name]
+            if dropped:
+                warnings.warn(
+                    f"from_netcdf imports one variable per call: imported "
+                    f"'{selected_var_name}' from {in_file.name} and did NOT import "
+                    f"{len(dropped)} other data variable(s): {dropped}. "
+                    f"Call from_netcdf(..., variable_name=...) once per variable "
+                    f"(each with its own output file) to convert them all.",
+                    UserWarning,
+                    stacklevel=2,
+                )
 
         nc_var = ds.variables[selected_var_name]
         dims = list(nc_var.dimensions)

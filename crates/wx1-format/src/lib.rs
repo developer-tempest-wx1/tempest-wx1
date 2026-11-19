@@ -2548,6 +2548,70 @@ where
     Ok(index)
 }
 
+/// Maximum age (by modification time) after which an abandoned `<name>.wx1-*tmp-*`
+/// sibling file is considered stale and removed by the next write to the same path.
+/// Age (not PID liveness) is used because PIDs are not meaningful across hosts on
+/// shared filesystems (NFS, Lustre) and are frequently identical in containers.
+pub const STALE_TEMP_MAX_AGE: std::time::Duration = std::time::Duration::from_secs(3600);
+
+/// Builds a collision-resistant sibling temporary path
+/// `<name>.<kind>-<pid>-<unix_nanos>-<counter>` and best-effort removes stale temporary
+/// files left behind by crashed writers (for example after `kill -9` or power loss).
+fn unique_temp_path(
+    parent: &std::path::Path,
+    name: &std::ffi::OsStr,
+    kind: &str,
+) -> std::path::PathBuf {
+    use std::sync::atomic::{AtomicU64, Ordering};
+    static COUNTER: AtomicU64 = AtomicU64::new(0);
+    cleanup_stale_temp_files(parent, name, STALE_TEMP_MAX_AGE);
+    let nanos = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_nanos())
+        .unwrap_or(0);
+    let mut temp_name = name.to_os_string();
+    temp_name.push(format!(
+        ".{kind}-{}-{nanos}-{}",
+        std::process::id(),
+        COUNTER.fetch_add(1, Ordering::Relaxed)
+    ));
+    parent.join(temp_name)
+}
+
+/// Removes `<name>.wx1-*tmp-*` siblings whose modification time is older than `max_age`.
+/// Failures are ignored: cleanup is best effort and must never block a write.
+pub fn cleanup_stale_temp_files(
+    parent: &std::path::Path,
+    name: &std::ffi::OsStr,
+    max_age: std::time::Duration,
+) {
+    let mut prefix = name.to_string_lossy().into_owned();
+    prefix.push_str(".wx1-");
+    let Ok(entries) = std::fs::read_dir(parent) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let file_name = entry.file_name();
+        let file_name = file_name.to_string_lossy();
+        if !file_name.starts_with(&prefix) || !file_name.contains("tmp-") {
+            continue;
+        }
+        let Ok(meta) = entry.metadata() else {
+            continue;
+        };
+        if !meta.is_file() {
+            continue;
+        }
+        let age = meta
+            .modified()
+            .ok()
+            .and_then(|m| std::time::SystemTime::now().duration_since(m).ok());
+        if age.is_some_and(|age| age >= max_age) {
+            let _ = std::fs::remove_file(entry.path());
+        }
+    }
+}
+
 /// Writes a complete experimental container to a sibling temporary file, calls
 /// `sync_all`, and atomically renames it into place. This protects publication of
 /// a newly generated file from exposing a partially written destination. It is
@@ -2562,9 +2626,7 @@ pub fn write_chunk_container_atomic(
     let path = path.as_ref();
     let parent = path.parent().unwrap_or_else(|| std::path::Path::new("."));
     let name = path.file_name().ok_or(ChunkIoError::InvalidDirectory)?;
-    let mut temp_name = name.to_os_string();
-    temp_name.push(format!(".wx1-tmp-{}", std::process::id()));
-    let temp_path = parent.join(temp_name);
+    let temp_path = unique_temp_path(parent, name, "wx1-tmp");
     let result = (|| {
         let mut file = std::fs::OpenOptions::new()
             .write(true)
@@ -3365,9 +3427,7 @@ pub fn write_committed_chunk_container_atomic(
     let path = path.as_ref();
     let parent = path.parent().unwrap_or_else(|| std::path::Path::new("."));
     let name = path.file_name().ok_or(ChunkIoError::InvalidDirectory)?;
-    let mut temp_name = name.to_os_string();
-    temp_name.push(format!(".wx1-commit-tmp-{}", std::process::id()));
-    let temp_path = parent.join(temp_name);
+    let temp_path = unique_temp_path(parent, name, "wx1-commit-tmp");
     let result = (|| {
         let mut file = std::fs::OpenOptions::new()
             .read(true)
@@ -7345,9 +7405,7 @@ pub fn write_generation_container_atomic_with_indexes(
     let name = path
         .file_name()
         .ok_or(ChunkIoError::DirectoryOffsetInvalid)?;
-    let mut temp_name = name.to_os_string();
-    temp_name.push(format!(".wx1-generation-tmp-{}", std::process::id()));
-    let temp_path = parent.join(temp_name);
+    let temp_path = unique_temp_path(parent, name, "wx1-generation-tmp");
     let mut temp_created = false;
     let result = (|| {
         let mut file = std::fs::OpenOptions::new()
@@ -7421,9 +7479,7 @@ pub fn write_generation_container_from_readers_atomic_with_indexes(
     let name = path
         .file_name()
         .ok_or(ChunkIoError::DirectoryOffsetInvalid)?;
-    let mut temp_name = name.to_os_string();
-    temp_name.push(format!(".wx1-generation-stream-tmp-{}", std::process::id()));
-    let temp_path = parent.join(temp_name);
+    let temp_path = unique_temp_path(parent, name, "wx1-generation-stream-tmp");
     let mut temp_created = false;
     let result = (|| {
         let mut file = std::fs::OpenOptions::new()
@@ -8732,5 +8788,89 @@ mod v039_persistent_btree_tests {
         fn flush(&mut self) -> std::io::Result<()> {
             self.inner.flush()
         }
+    }
+}
+
+#[cfg(test)]
+mod stale_temp_file_tests {
+    use super::*;
+    use std::time::{Duration, SystemTime};
+
+    fn scratch_dir(tag: &str) -> std::path::PathBuf {
+        let dir = std::env::temp_dir().join(format!(
+            "wx1-stale-tmp-{tag}-{}-{}",
+            std::process::id(),
+            SystemTime::now()
+                .duration_since(SystemTime::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    #[test]
+    fn leftover_temp_file_with_same_pid_does_not_block_new_writes() {
+        let dir = scratch_dir("samepid");
+        let name = std::ffi::OsString::from("data.wx1");
+        // Simulate a crashed writer (kill -9) that left the legacy PID-only name behind.
+        let leftover = dir.join(format!(
+            "data.wx1.wx1-generation-stream-tmp-{}",
+            std::process::id()
+        ));
+        std::fs::write(&leftover, b"partial").unwrap();
+
+        let a = unique_temp_path(&dir, &name, "wx1-generation-stream-tmp");
+        let b = unique_temp_path(&dir, &name, "wx1-generation-stream-tmp");
+        assert_ne!(a, leftover);
+        assert_ne!(a, b);
+        for p in [&a, &b] {
+            std::fs::OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(p)
+                .expect("fresh temp path must never collide with a leftover file");
+        }
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn cleanup_removes_only_old_matching_temp_files() {
+        let dir = scratch_dir("cleanup");
+        let name = std::ffi::OsString::from("data.wx1");
+        let old = dir.join("data.wx1.wx1-tmp-1-1-1");
+        let fresh = dir.join("data.wx1.wx1-commit-tmp-2-2-2");
+        let unrelated = dir.join("other.wx1.wx1-tmp-3-3-3");
+        let real = dir.join("data.wx1");
+        for p in [&old, &fresh, &unrelated, &real] {
+            std::fs::write(p, b"x").unwrap();
+        }
+        let two_hours_ago = SystemTime::now() - Duration::from_secs(7200);
+        std::fs::File::options()
+            .write(true)
+            .open(&old)
+            .unwrap()
+            .set_modified(two_hours_ago)
+            .unwrap();
+        std::fs::File::options()
+            .write(true)
+            .open(&unrelated)
+            .unwrap()
+            .set_modified(two_hours_ago)
+            .unwrap();
+
+        cleanup_stale_temp_files(&dir, &name, STALE_TEMP_MAX_AGE);
+
+        assert!(!old.exists(), "stale temp file must be removed");
+        assert!(
+            fresh.exists(),
+            "recent temp file (possibly live writer) must be kept"
+        );
+        assert!(
+            unrelated.exists(),
+            "temp files of other targets must be kept"
+        );
+        assert!(real.exists(), "the real data file must never be removed");
+        std::fs::remove_dir_all(&dir).unwrap();
     }
 }

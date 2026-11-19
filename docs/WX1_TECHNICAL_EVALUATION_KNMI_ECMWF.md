@@ -5,7 +5,7 @@
 **Computational Analysis & Verification:** Assisted by Google DeepMind Antigravity AI  
 **Target Institutions:** Scientific Computing, Archiving & Machine Learning Teams at **KNMI** and **ECMWF**  
 **Contact:** developer.tempestwx1@gmail.com  
-**Software:** `tempest-wx1` 0.1.6 (Rust core + Python bindings, on PyPI, https://github.com/developer-tempest-wx1/tempest-wx1) and `wx1-lorenzo` 0.1.1 (Zarr v3 codec, on PyPI, https://github.com/developer-tempest-wx1/wx1-lorenzo)  
+**Software:** `tempest-wx1` 0.1.7 (Rust core + Python bindings, on PyPI, https://github.com/developer-tempest-wx1/tempest-wx1) and `wx1-lorenzo` 0.1.1 (Zarr v3 codec, on PyPI, https://github.com/developer-tempest-wx1/wx1-lorenzo)  
 **Date:** November 2026  
 
 ---
@@ -204,7 +204,7 @@ flowchart LR
 ---
 ## 8. Examples (each executed in a fresh virtual environment)
 
-Environment: `python -m venv` with `pip install zarr==3.4.2 numpy numcodecs eccodes wx1-lorenzo==0.1.1 tempest-wx1==0.1.6`.
+Environment: `python -m venv` with `pip install zarr==3.4.2 numpy numcodecs eccodes wx1-lorenzo==0.1.1 tempest-wx1==0.1.7`.
 
 ### 8.1 Zarr v3 + Lorenzo2D, end to end: write → read back → bit-exact check → size vs GRIB2-AEC
 

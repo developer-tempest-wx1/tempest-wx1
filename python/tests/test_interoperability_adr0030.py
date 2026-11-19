@@ -380,3 +380,38 @@ def test_error_handling_and_validation(tmp_path):
 
     with pytest.raises(FileNotFoundError):
         wx1.from_zarr(tmp_path / "missing.zarr", tmp_path / "out.wx1")
+
+
+def test_from_netcdf_warns_when_other_variables_are_not_imported(tmp_path):
+    """from_netcdf imports one variable per call and must never drop others silently."""
+    pytest.importorskip("netCDF4")
+    import netCDF4
+
+    src_nc = tmp_path / "multi.nc"
+    with netCDF4.Dataset(src_nc, "w", format="NETCDF4") as ds:
+        ds.createDimension("lat", 4)
+        ds.createDimension("lon", 5)
+        for name in ("t2m", "u10", "v10"):
+            v = ds.createVariable(name, "f4", ("lat", "lon"))
+            v[:] = np.arange(20, dtype=np.float32).reshape(4, 5)
+
+    # No explicit variable_name: first variable is imported, the other two must be reported.
+    with pytest.warns(UserWarning, match=r"did NOT import 2 other data variable\(s\).*u10.*v10"):
+        wx1.from_netcdf(src_nc, tmp_path / "auto.wx1").close()
+
+    # Explicit variable_name: caller made a deliberate choice, no warning.
+    import warnings
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        wx1.from_netcdf(src_nc, tmp_path / "explicit.wx1", variable_name="u10").close()
+
+    # Single-variable file: nothing dropped, no warning.
+    single = tmp_path / "single.nc"
+    with netCDF4.Dataset(single, "w", format="NETCDF4") as ds:
+        ds.createDimension("lat", 4)
+        ds.createDimension("lon", 5)
+        ds.createVariable("t2m", "f4", ("lat", "lon"))[:] = np.zeros((4, 5), dtype=np.float32)
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        wx1.from_netcdf(single, tmp_path / "single.wx1").close()
