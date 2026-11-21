@@ -43,7 +43,7 @@ try:
     from importlib.metadata import version as _get_version
     __version__ = _get_version("tempest-wx1")
 except Exception:
-    __version__ = "0.1.7"
+    __version__ = "0.1.8"
 
 __all__ = [
     "__version__",
@@ -291,14 +291,22 @@ class Wx1File:
     @property
     def attributes(self) -> dict[str, str]:
         self._check_open()
-        attrs = {k: v for k, v in dict(self._native.attributes()).items() if not k.startswith("wx1:__")}
-        if not attrs:
+        raw_native = dict(self._native.attributes())
+        attrs = {k: v for k, v in raw_native.items() if not k.startswith("wx1:__")}
+        if not raw_native and len(self._native.variables()) == 1:
             for v in self.variables:
                 v_attrs = v.get("attributes", {})
                 for k, val in v_attrs.items():
                     if not k.startswith("wx1:__"):
                         attrs[k] = str(val)
         return attrs
+
+    @property
+    def coordinates(self) -> list[dict[str, Any]]:
+        self._check_open()
+        if hasattr(self._native, "coordinates"):
+            return list(self._native.coordinates())
+        return []
 
     @property
     def dimensions(self) -> dict[str, tuple[int, str]]:
@@ -536,6 +544,169 @@ def open_file(path: str | Path) -> Wx1File:
 #          chunk shapes, lossless/lossy profiles, codecs, and grid staggering.
 # ==============================================================================
 
+_NP_TIME_UNIT_CF: dict[str, tuple[str, str]] = {
+    "D": ("days", "day"),
+    "h": ("hours", "hour"),
+    "m": ("minutes", "minute"),
+    "s": ("seconds", "second"),
+    "ms": ("milliseconds", "millisecond"),
+    "us": ("microseconds", "microsecond"),
+    "ns": ("nanoseconds", "nanosecond"),
+}
+
+_CF_UNIT_TO_PRECISION: dict[str, str] = {
+    "day": "day", "days": "day", "d": "day",
+    "hour": "hour", "hours": "hour", "h": "hour", "hr": "hour", "hrs": "hour",
+    "minute": "minute", "minutes": "minute", "min": "minute", "mins": "minute",
+    "second": "second", "seconds": "second", "s": "second", "sec": "second", "secs": "second",
+    "millisecond": "millisecond", "milliseconds": "millisecond", "ms": "millisecond",
+    "microsecond": "microsecond", "microseconds": "microsecond", "us": "microsecond",
+    "nanosecond": "nanosecond", "nanoseconds": "nanosecond", "ns": "nanosecond",
+}
+
+
+def _encode_temporal_array(array, attrs: Mapping[str, str]):
+    """Encode numpy datetime64 / timedelta64 to bit-exact int64 carrier with CF metadata."""
+    np = _numpy()
+    kind = array.dtype.kind
+    out_attrs = dict(attrs)
+    if kind not in ("M", "m"):
+        return array, out_attrs
+
+    unit, count = np.datetime_data(array.dtype)
+    if unit == "W":
+        array = array.astype(f"{kind}8[D]")
+        unit = "D"
+    elif unit in ("generic", "Y", "M"):
+        array = array.astype(f"{kind}8[s]")
+        unit = "s"
+    elif count != 1:
+        array = array.astype(f"{kind}8[{unit}]")
+
+    cf_unit, _prec = _NP_TIME_UNIT_CF.get(unit, ("seconds", "second"))
+    bo = array.dtype.byteorder
+    i8_dtype = np.dtype(f"{bo if bo in ('<', '>') else '='}i8")
+    raw_i8 = np.ascontiguousarray(array).view(i8_dtype)
+    out_attrs["wx1:logical_dtype"] = str(array.dtype)
+    if kind == "M":
+        out_attrs.setdefault("units", f"{cf_unit} since 1970-01-01 00:00:00")
+        out_attrs.setdefault("calendar", "proleptic_gregorian")
+    else:
+        out_attrs.setdefault("units", cf_unit)
+    return raw_i8, out_attrs
+
+
+def _infer_coordinate_spec(
+    name: str,
+    host_data,
+    v_dims: Sequence[str],
+    v_attrs: Mapping[str, str],
+    roles_map: Mapping[str, str],
+) -> dict[str, Any]:
+    """Build a Rust-validated Coordinate specification dictionary."""
+    np = _numpy()
+    lower = name.lower()
+    attr_axis = str(v_attrs.get("axis", "")).upper()
+    std_name = str(v_attrs.get("standard_name", "")).lower()
+    units_str = str(v_attrs.get("units", "")).strip()
+    units_lower = units_str.lower()
+    logical_dtype = str(v_attrs.get("wx1:logical_dtype", ""))
+    is_metric_axis = units_lower in ("m", "meter", "meters", "metre", "metres", "km")
+
+    if attr_axis == "T" or std_name == "time":
+        axis = "time"
+    elif std_name == "forecast_reference_time" or lower in ("forecast_reference_time", "ref_time", "init_time"):
+        axis = "forecast_reference_time"
+    elif attr_axis == "Y" or std_name == "latitude":
+        axis = "latitude"
+    elif attr_axis == "X" or std_name == "longitude":
+        axis = "longitude"
+    elif attr_axis == "Z" or std_name in ("height", "altitude", "depth"):
+        axis = "height" if std_name == "height" else "vertical"
+    elif std_name == "realization":
+        axis = "ensemble"
+    elif logical_dtype.startswith("datetime64["):
+        axis = "time"
+    elif logical_dtype.startswith("timedelta64["):
+        axis = "other"
+    elif len(v_dims) == 1 and v_dims[0] in roles_map:
+        axis = roles_map[v_dims[0]]
+    elif lower in ("time", "valid_time", "t", "step") or ("time" in lower and "step" not in lower):
+        axis = "time"
+    elif (lower in ("lat", "latitude", "rlat", "yc") or ("lat" in lower and "delta" not in lower)) or (
+        lower in ("y", "nj") and not is_metric_axis
+    ):
+        axis = "latitude"
+    elif (lower in ("lon", "longitude", "rlon", "xc") or "lon" in lower) or (
+        lower in ("x", "ni") and not is_metric_axis
+    ):
+        axis = "longitude"
+    elif lower in ("height", "altitude", "z"):
+        axis = "height"
+    elif "lev" in lower or "pres" in lower or lower in ("isobaric", "hybrid", "eta", "sigma", "soil_layer"):
+        axis = "vertical"
+    elif lower in ("ensemble", "member", "number"):
+        axis = "ensemble"
+    else:
+        axis = "other"
+
+    spec: dict[str, Any] = {
+        "name": name,
+        "variable": f"/{name}",
+        "axis": axis,
+    }
+    if axis in ("time", "forecast_reference_time"):
+        t_units = "seconds"
+        t_epoch = "1970-01-01T00:00:00Z"
+        if " since " in units_str:
+            u_part, ep_part = units_str.split(" since ", 1)
+            if u_part.strip():
+                t_units = u_part.strip()
+            if ep_part.strip():
+                t_epoch = ep_part.strip().replace(" ", "T")
+                if not t_epoch.endswith("Z") and "+" not in t_epoch and len(t_epoch) >= 10:
+                    t_epoch = t_epoch + ("T00:00:00Z" if len(t_epoch) == 10 else "Z")
+        prec = _CF_UNIT_TO_PRECISION.get(t_units.lower(), "second")
+        if logical_dtype.startswith("datetime64[") and logical_dtype.endswith("]"):
+            np_u = logical_dtype[len("datetime64[") : -1]
+            if np_u in _NP_TIME_UNIT_CF:
+                t_units, prec = _NP_TIME_UNIT_CF[np_u]
+        cal = v_attrs.get("calendar") or "proleptic_gregorian"
+        spec["time"] = {
+            "calendar": str(cal),
+            "units": t_units,
+            "epoch": t_epoch,
+            "timezone": "UTC",
+            "precision": prec,
+        }
+    elif axis in ("vertical", "height"):
+        if "pressure" in lower or "plev" in lower or "isobaric" in lower or units_lower in ("hpa", "pa", "mb"):
+            v_kind = "pressure"
+        elif "eta" in lower or "hybrid" in lower or "sigma" in lower:
+            v_kind = "hybrid"
+        elif "soil" in lower:
+            v_kind = "soil_layer"
+        elif "depth" in lower:
+            v_kind = "depth"
+        elif axis == "height" or "height" in lower:
+            v_kind = "geometric_height"
+        else:
+            v_kind = "other"
+        pos = str(v_attrs.get("positive", "")).lower()
+        if pos not in ("up", "down"):
+            pos = "down" if v_kind in ("pressure", "depth", "soil_layer") else "up"
+        v_units = units_str if units_str else ("m" if axis == "height" else "1")
+        spec["vertical"] = {"kind": v_kind, "units": v_units, "positive": pos}
+    elif axis == "longitude":
+        lc = "minus180_to_180"
+        if np.issubdtype(host_data.dtype, np.number) and host_data.size > 0:
+            finite = host_data[np.isfinite(host_data)]
+            if finite.size > 0 and float(np.max(finite)) > 180.0 and float(np.min(finite)) >= -1.0:
+                lc = "zero_to_360"
+        spec["longitude_convention"] = lc
+    return spec
+
+
 def write_array(
     path: str | Path,
     data,
@@ -584,6 +755,7 @@ def write_array(
     np = _numpy()
     array = _to_host_numpy(data)
     attrs = {str(key): str(value) for key, value in (attributes or {}).items()}
+    array, attrs = _encode_temporal_array(array, attrs)
     enc_var_path, logical_path = _encode_var_path(str(variable_path))
     if logical_path is not None:
         attrs["wx1:__logical_path__"] = logical_path
@@ -664,6 +836,7 @@ def write_dataset(
     dimension_roles: Mapping[str, str] | None = None,
     attributes: Mapping[str, Any] | None = None,
     variable_attributes: Mapping[str, Mapping[str, Any]] | None = None,
+    coordinates: Sequence[str] | Mapping[str, Mapping[str, Any]] | None = None,
     codec: str = "zstd",
     workers: int = 4,
     durability: str = "durable",
@@ -705,8 +878,39 @@ def write_dataset(
     }
 
     var_items = []
+    seen_vars: set[str] = set()
+    explicit_coord_names: list[str] = []
+    explicit_coord_overrides: dict[str, dict[str, Any]] = {}
     dim_lengths: dict[str, int] = {}
     global_attrs: dict[str, str] = {}
+
+    if isinstance(coordinates, Mapping):
+        for cname, cspec in coordinates.items():
+            name_clean = str(cname).lstrip("/")
+            explicit_coord_names.append(name_clean)
+            if isinstance(cspec, Mapping):
+                explicit_coord_overrides[name_clean] = dict(cspec)
+    elif coordinates is not None:
+        explicit_coord_names = [str(c).lstrip("/") for c in coordinates]
+
+    def _resolve_xr_var(var_name: str, da):
+        host_data = _to_host_numpy(da.values)
+        v_dims = [str(d) for d in da.dims]
+        v_attrs = {str(k): str(v) for k, v in da.attrs.items()}
+        # Preserve CF encoding (e.g. units/calendar on decoded time) without clobbering attrs
+        if hasattr(da, "encoding"):
+            for ek in ("units", "calendar"):
+                if ek in da.encoding and ek not in v_attrs:
+                    v_attrs[ek] = str(da.encoding[ek])
+        host_data, v_attrs = _encode_temporal_array(host_data, v_attrs)
+        v_chunks = None
+        if isinstance(chunk_shapes, Mapping):
+            v_chunks = chunk_shapes.get(str(var_name))
+        elif isinstance(chunk_shapes, Sequence) and not isinstance(chunk_shapes, (str, bytes)):
+            v_chunks = chunk_shapes
+        elif hasattr(da, "encoding") and "chunks" in da.encoding:
+            v_chunks = da.encoding["chunks"]
+        return (str(var_name), host_data, v_dims, v_chunks, v_attrs, codec)
 
     is_xr = False
     if "xarray" in sys.modules:
@@ -717,18 +921,18 @@ def write_dataset(
                 dim_lengths[str(d)] = int(length)
             for k, v in variables.attrs.items():
                 global_attrs[str(k)] = str(v)
+            for coord_name, coord_da in variables.coords.items():
+                cname = str(coord_name)
+                if cname not in seen_vars:
+                    seen_vars.add(cname)
+                    var_items.append(_resolve_xr_var(cname, coord_da))
+                if cname not in explicit_coord_names:
+                    explicit_coord_names.append(cname)
             for var_name, da in variables.data_vars.items():
-                host_data = _to_host_numpy(da.values)
-                v_dims = [str(d) for d in da.dims]
-                v_attrs = {str(k): str(v) for k, v in da.attrs.items()}
-                v_chunks = None
-                if isinstance(chunk_shapes, Mapping):
-                    v_chunks = chunk_shapes.get(str(var_name))
-                elif isinstance(chunk_shapes, Sequence):
-                    v_chunks = chunk_shapes
-                elif hasattr(da, "encoding") and "chunks" in da.encoding:
-                    v_chunks = da.encoding["chunks"]
-                var_items.append((str(var_name), host_data, v_dims, v_chunks, v_attrs, codec))
+                vname = str(var_name)
+                if vname not in seen_vars:
+                    seen_vars.add(vname)
+                    var_items.append(_resolve_xr_var(vname, da))
 
     if not is_xr:
         if not isinstance(variables, Mapping):
@@ -773,11 +977,15 @@ def write_dataset(
                 v_codec = codec
                 v_chunks = chunk_shapes.get(var_name) if isinstance(chunk_shapes, Mapping) else chunk_shapes
 
+            host_data, v_attrs = _encode_temporal_array(host_data, v_attrs)
             if v_dims is None:
                 v_dims = [f"dim_{i}" for i in range(host_data.ndim)]
             else:
                 v_dims = [str(d) for d in v_dims]
-            var_items.append((str(var_name), host_data, v_dims, v_chunks, v_attrs, v_codec))
+            vname = str(var_name).lstrip("/")
+            var_items.append((vname, host_data, v_dims, v_chunks, v_attrs, v_codec))
+            if coordinates is None and len(v_dims) == 1 and v_dims[0] == vname and vname not in explicit_coord_names:
+                explicit_coord_names.append(vname)
 
     if attributes:
         for k, v in attributes.items():
@@ -824,7 +1032,10 @@ def write_dataset(
             byte_order_name = sys.byteorder if host_data.dtype.itemsize > 1 else "little"
         else:
             byte_order_name = "little" if byte_order == "<" else "big"
-        chunk_shape = [int(s) for s in (v_chunks or host_data.shape)]
+        if v_chunks is not None:
+            chunk_shape = [int(s) for s in v_chunks]
+        else:
+            chunk_shape = [int(s) for s in host_data.shape]
 
         var_dicts.append({
             "name": var_name,
@@ -838,6 +1049,23 @@ def write_dataset(
             "codec": v_codec,
         })
 
+    var_lookup = {
+        var_name: (host_data, v_dims, v_attrs)
+        for var_name, host_data, v_dims, _, v_attrs, _ in var_items
+    }
+    coord_dicts = []
+    seen_coords: set[str] = set()
+    for cname in explicit_coord_names:
+        if cname in seen_coords or cname not in var_lookup:
+            continue
+        seen_coords.add(cname)
+        c_data, c_dims, c_attrs = var_lookup[cname]
+        spec = _infer_coordinate_spec(cname, c_data, c_dims, c_attrs, roles_map)
+        if cname in explicit_coord_overrides:
+            override = explicit_coord_overrides[cname]
+            spec.update(override)
+        coord_dicts.append(spec)
+
     _require_core().write_dataset(
         str(Path(path)),
         str(dataset_id),
@@ -846,6 +1074,7 @@ def write_dataset(
         global_attrs,
         int(workers),
         str(durability),
+        coord_dicts if coord_dicts else None,
     )
 
 

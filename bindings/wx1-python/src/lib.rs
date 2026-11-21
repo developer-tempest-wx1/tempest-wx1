@@ -24,12 +24,13 @@ use wx1_format::{
     open_scientific_snapshot_lazy, stage_chunks_parallel,
     write_generation_container_from_readers_atomic, write_staged_generation_container_atomic,
     ArrayChunkRef, ArraySelection, AsyncScientificWriter, AsyncWriterOptions, AttributeValue,
-    ChunkCodec, ChunkReaderInput, ChunkWriteOptions, CubedSphereTopology, DataType, Dimension,
-    DimensionRole, EncodedChunkInput, ErrorMetric, GnomonicProjection, GridFamily,
-    GridTopologyDescriptor, HaloSpec, HeaderByteOrder, HorizontalStagger, Metadata,
-    PayloadByteOrder, QuantizationConfig, ReducedGaussianTopology, ScientificDataset, Variable,
-    VariableGridLayout, VerticalStagger, WriteDurability, MAX_CHUNKS, MAX_CHUNK_BYTES,
-    MAX_SCIENTIFIC_RANK,
+    ChunkCodec, ChunkReaderInput, ChunkWriteOptions, Coordinate, CoordinateAxis,
+    CubedSphereTopology, DataType, Dimension, DimensionRole, EncodedChunkInput, ErrorMetric,
+    GnomonicProjection, GridFamily, GridTopologyDescriptor, HaloSpec, HeaderByteOrder,
+    HorizontalStagger, LongitudeConvention, Metadata, PayloadByteOrder, QuantizationConfig,
+    ReducedGaussianTopology, ScientificDataset, TimeCalendar, TimeCoordinate, TimePrecision,
+    Variable, VariableGridLayout, VerticalCoordinate, VerticalDirection, VerticalKind,
+    VerticalStagger, WriteDurability, MAX_CHUNKS, MAX_CHUNK_BYTES, MAX_SCIENTIFIC_RANK,
 };
 
 fn io_error(error: impl std::fmt::Display) -> PyErr {
@@ -116,6 +117,102 @@ fn dimension_role(value: &str) -> PyResult<DimensionRole> {
     }
 }
 
+fn coordinate_axis(value: &str) -> PyResult<CoordinateAxis> {
+    match value {
+        "other" | "horizontal" => Ok(CoordinateAxis::Other),
+        "time" => Ok(CoordinateAxis::Time),
+        "forecast_reference_time" => Ok(CoordinateAxis::ForecastReferenceTime),
+        "ensemble" => Ok(CoordinateAxis::Ensemble),
+        "vertical" => Ok(CoordinateAxis::Vertical),
+        "latitude" => Ok(CoordinateAxis::Latitude),
+        "longitude" => Ok(CoordinateAxis::Longitude),
+        "height" => Ok(CoordinateAxis::Height),
+        _ => Err(PyValueError::new_err(format!(
+            "unsupported coordinate axis: {value}"
+        ))),
+    }
+}
+
+fn coordinate_axis_name(value: CoordinateAxis) -> &'static str {
+    match value {
+        CoordinateAxis::Other => "other",
+        CoordinateAxis::Time => "time",
+        CoordinateAxis::ForecastReferenceTime => "forecast_reference_time",
+        CoordinateAxis::Ensemble => "ensemble",
+        CoordinateAxis::Vertical => "vertical",
+        CoordinateAxis::Latitude => "latitude",
+        CoordinateAxis::Longitude => "longitude",
+        CoordinateAxis::Height => "height",
+    }
+}
+
+fn time_calendar(value: &str) -> PyResult<TimeCalendar> {
+    match value.to_ascii_lowercase().as_str() {
+        "gregorian" | "standard" => Ok(TimeCalendar::Gregorian),
+        "proleptic_gregorian" => Ok(TimeCalendar::ProlepticGregorian),
+        "julian" => Ok(TimeCalendar::Julian),
+        "noleap" | "365_day" => Ok(TimeCalendar::NoLeap),
+        "all_leap" | "366_day" => Ok(TimeCalendar::AllLeap),
+        "360_day" | "day360" => Ok(TimeCalendar::Day360),
+        "utc" => Ok(TimeCalendar::Utc),
+        _ => Err(PyValueError::new_err(format!(
+            "unsupported time calendar: {value}"
+        ))),
+    }
+}
+
+fn time_precision(value: &str) -> PyResult<TimePrecision> {
+    match value.to_ascii_lowercase().as_str() {
+        "day" | "days" | "d" => Ok(TimePrecision::Day),
+        "hour" | "hours" | "h" => Ok(TimePrecision::Hour),
+        "minute" | "minutes" | "m" | "min" => Ok(TimePrecision::Minute),
+        "second" | "seconds" | "s" | "sec" => Ok(TimePrecision::Second),
+        "millisecond" | "milliseconds" | "ms" => Ok(TimePrecision::Millisecond),
+        "microsecond" | "microseconds" | "us" => Ok(TimePrecision::Microsecond),
+        "nanosecond" | "nanoseconds" | "ns" => Ok(TimePrecision::Nanosecond),
+        _ => Err(PyValueError::new_err(format!(
+            "unsupported time precision: {value}"
+        ))),
+    }
+}
+
+fn vertical_kind(value: &str) -> PyResult<VerticalKind> {
+    match value.to_ascii_lowercase().as_str() {
+        "pressure" | "isobaric" => Ok(VerticalKind::Pressure),
+        "geometric_height" | "height" => Ok(VerticalKind::GeometricHeight),
+        "geopotential_height" => Ok(VerticalKind::GeopotentialHeight),
+        "altitude" => Ok(VerticalKind::Altitude),
+        "depth" => Ok(VerticalKind::Depth),
+        "hybrid" | "eta" | "sigma" => Ok(VerticalKind::Hybrid),
+        "soil_layer" => Ok(VerticalKind::SoilLayer),
+        "other" => Ok(VerticalKind::Other),
+        _ => Err(PyValueError::new_err(format!(
+            "unsupported vertical coordinate kind: {value}"
+        ))),
+    }
+}
+
+fn vertical_direction(value: &str) -> PyResult<VerticalDirection> {
+    match value.to_ascii_lowercase().as_str() {
+        "up" => Ok(VerticalDirection::Up),
+        "down" => Ok(VerticalDirection::Down),
+        _ => Err(PyValueError::new_err(format!(
+            "unsupported vertical positive direction: {value}"
+        ))),
+    }
+}
+
+fn longitude_convention(value: &str) -> PyResult<LongitudeConvention> {
+    match value.to_ascii_lowercase().as_str() {
+        "minus180_to_180" | "-180_to_180" | "-180..180" => Ok(LongitudeConvention::Minus180To180),
+        "zero_to_360" | "0_to_360" | "0..360" => Ok(LongitudeConvention::ZeroTo360),
+        "unwrapped" => Ok(LongitudeConvention::Unwrapped),
+        _ => Err(PyValueError::new_err(format!(
+            "unsupported longitude convention: {value}"
+        ))),
+    }
+}
+
 #[pyclass(name = "Wx1File")]
 struct PyWx1File {
     path: PathBuf,
@@ -166,6 +263,84 @@ impl PyWx1File {
             .iter()
             .map(|coordinate| coordinate.variable.clone())
             .collect()
+    }
+
+    fn coordinates(&self, py: Python<'_>) -> PyResult<Py<PyList>> {
+        let list = PyList::empty(py);
+        for coordinate in &self.snapshot.dataset().coordinates {
+            let item = PyDict::new(py);
+            item.set_item("name", &coordinate.name)?;
+            item.set_item("variable", &coordinate.variable)?;
+            item.set_item("axis", coordinate_axis_name(coordinate.axis))?;
+            if let Some(ref tc) = coordinate.time {
+                let td = PyDict::new(py);
+                td.set_item(
+                    "calendar",
+                    match tc.calendar {
+                        TimeCalendar::Gregorian => "gregorian",
+                        TimeCalendar::ProlepticGregorian => "proleptic_gregorian",
+                        TimeCalendar::Julian => "julian",
+                        TimeCalendar::NoLeap => "noleap",
+                        TimeCalendar::AllLeap => "all_leap",
+                        TimeCalendar::Day360 => "360_day",
+                        TimeCalendar::Utc => "utc",
+                    },
+                )?;
+                td.set_item("units", &tc.units)?;
+                td.set_item("epoch", &tc.epoch)?;
+                td.set_item("timezone", &tc.timezone)?;
+                td.set_item(
+                    "precision",
+                    match tc.precision {
+                        TimePrecision::Day => "day",
+                        TimePrecision::Hour => "hour",
+                        TimePrecision::Minute => "minute",
+                        TimePrecision::Second => "second",
+                        TimePrecision::Millisecond => "millisecond",
+                        TimePrecision::Microsecond => "microsecond",
+                        TimePrecision::Nanosecond => "nanosecond",
+                    },
+                )?;
+                item.set_item("time", td)?;
+            }
+            if let Some(ref vc) = coordinate.vertical {
+                let vd = PyDict::new(py);
+                vd.set_item(
+                    "kind",
+                    match vc.kind {
+                        VerticalKind::Pressure => "pressure",
+                        VerticalKind::GeometricHeight => "geometric_height",
+                        VerticalKind::GeopotentialHeight => "geopotential_height",
+                        VerticalKind::Altitude => "altitude",
+                        VerticalKind::Depth => "depth",
+                        VerticalKind::Hybrid => "hybrid",
+                        VerticalKind::SoilLayer => "soil_layer",
+                        VerticalKind::Other => "other",
+                    },
+                )?;
+                vd.set_item("units", &vc.units)?;
+                vd.set_item(
+                    "positive",
+                    match vc.positive {
+                        VerticalDirection::Up => "up",
+                        VerticalDirection::Down => "down",
+                    },
+                )?;
+                item.set_item("vertical", vd)?;
+            }
+            if let Some(lc) = coordinate.longitude_convention {
+                item.set_item(
+                    "longitude_convention",
+                    match lc {
+                        LongitudeConvention::Minus180To180 => "minus180_to_180",
+                        LongitudeConvention::ZeroTo360 => "zero_to_360",
+                        LongitudeConvention::Unwrapped => "unwrapped",
+                    },
+                )?;
+            }
+            list.append(item)?;
+        }
+        Ok(list.unbind())
     }
 
     fn variables(&self, py: Python<'_>) -> PyResult<Py<PyList>> {
@@ -1362,6 +1537,7 @@ impl PyAsyncWriter {
 
 #[pyfunction]
 #[allow(clippy::too_many_arguments)]
+#[pyo3(signature = (path, dataset_id, dimensions, variables, global_attributes, workers, durability, coordinates=None))]
 fn write_dataset(
     py: Python<'_>,
     path: String,
@@ -1371,6 +1547,7 @@ fn write_dataset(
     global_attributes: HashMap<String, String>,
     workers: usize,
     durability: String,
+    coordinates: Option<Vec<Bound<'_, PyDict>>>,
 ) -> PyResult<()> {
     let path = PathBuf::from(path);
     let write_durability = match durability.as_str() {
@@ -1397,7 +1574,7 @@ fn write_dataset(
 
     let mut next_chunk_id: u64 = 1;
     let mut all_tile_buffers: Vec<(u64, Vec<u8>, ChunkCodec)> = Vec::new();
-    let mut metadata_attrs = global_attributes;
+    let metadata_attrs = global_attributes;
 
     for vdict in variables {
         let raw_name: String = vdict
@@ -1491,12 +1668,6 @@ fn write_dataset(
             .entry("wx1:profile".to_owned())
             .or_insert_with(|| AttributeValue::Text("restart".to_owned()));
 
-        for (k, v) in &variable_attributes {
-            if let AttributeValue::Text(s) = v {
-                metadata_attrs.entry(k.clone()).or_insert_with(|| s.clone());
-            }
-        }
-
         dataset.variables.push(Variable {
             name,
             group: "/".to_owned(),
@@ -1510,6 +1681,164 @@ fn write_dataset(
             chunks: refs,
             grid_mapping: None,
         });
+    }
+
+    if let Some(coord_dicts) = coordinates {
+        for cdict in coord_dicts {
+            let raw_name: String = cdict
+                .get_item("name")?
+                .ok_or_else(|| PyValueError::new_err("coordinate missing 'name'"))?
+                .extract()?;
+            let cname = raw_name
+                .strip_prefix('/')
+                .unwrap_or(raw_name.as_str())
+                .to_owned();
+            if cname.is_empty() || cname.contains('/') {
+                return Err(PyValueError::new_err(
+                    "coordinate name must be a non-empty root identifier",
+                ));
+            }
+            let raw_var: String = cdict
+                .get_item("variable")?
+                .map(|v| v.extract())
+                .transpose()?
+                .unwrap_or_else(|| cname.clone());
+            let clean_var = raw_var.strip_prefix('/').unwrap_or(raw_var.as_str());
+            let variable_path = format!("/{clean_var}");
+            let axis_str: String = cdict
+                .get_item("axis")?
+                .map(|v| v.extract())
+                .transpose()?
+                .unwrap_or_else(|| "other".to_owned());
+            let axis = coordinate_axis(&axis_str)?;
+
+            let time_coord = match axis {
+                CoordinateAxis::Time | CoordinateAxis::ForecastReferenceTime => {
+                    let t_opt = cdict.get_item("time")?;
+                    let t_dict = t_opt.as_ref().and_then(|v| v.downcast::<PyDict>().ok());
+                    let cal_str = match t_dict {
+                        Some(d) => d
+                            .get_item("calendar")?
+                            .map(|v| v.extract::<String>())
+                            .transpose()?
+                            .unwrap_or_else(|| "proleptic_gregorian".to_owned()),
+                        None => "proleptic_gregorian".to_owned(),
+                    };
+                    let units = match t_dict {
+                        Some(d) => d
+                            .get_item("units")?
+                            .map(|v| v.extract::<String>())
+                            .transpose()?
+                            .filter(|s| !s.is_empty())
+                            .unwrap_or_else(|| "seconds".to_owned()),
+                        None => "seconds".to_owned(),
+                    };
+                    let epoch = match t_dict {
+                        Some(d) => d
+                            .get_item("epoch")?
+                            .map(|v| v.extract::<String>())
+                            .transpose()?
+                            .filter(|s| !s.is_empty())
+                            .unwrap_or_else(|| "1970-01-01T00:00:00Z".to_owned()),
+                        None => "1970-01-01T00:00:00Z".to_owned(),
+                    };
+                    let timezone = match t_dict {
+                        Some(d) => d
+                            .get_item("timezone")?
+                            .map(|v| v.extract::<String>())
+                            .transpose()?
+                            .filter(|s| !s.is_empty())
+                            .unwrap_or_else(|| "UTC".to_owned()),
+                        None => "UTC".to_owned(),
+                    };
+                    let prec_str = match t_dict {
+                        Some(d) => d
+                            .get_item("precision")?
+                            .map(|v| v.extract::<String>())
+                            .transpose()?
+                            .unwrap_or_else(|| "second".to_owned()),
+                        None => "second".to_owned(),
+                    };
+                    Some(TimeCoordinate {
+                        calendar: time_calendar(&cal_str)?,
+                        units,
+                        epoch,
+                        timezone,
+                        precision: time_precision(&prec_str)?,
+                    })
+                }
+                _ => None,
+            };
+
+            let vertical_coord = match axis {
+                CoordinateAxis::Vertical | CoordinateAxis::Height => {
+                    let v_opt = cdict.get_item("vertical")?;
+                    let v_dict = v_opt.as_ref().and_then(|v| v.downcast::<PyDict>().ok());
+                    let default_kind = if axis == CoordinateAxis::Height {
+                        "geometric_height"
+                    } else {
+                        "other"
+                    };
+                    let default_units = if axis == CoordinateAxis::Height {
+                        "m"
+                    } else {
+                        "1"
+                    };
+                    let kind_str = match v_dict {
+                        Some(d) => d
+                            .get_item("kind")?
+                            .map(|v| v.extract::<String>())
+                            .transpose()?
+                            .unwrap_or_else(|| default_kind.to_owned()),
+                        None => default_kind.to_owned(),
+                    };
+                    let units = match v_dict {
+                        Some(d) => d
+                            .get_item("units")?
+                            .map(|v| v.extract::<String>())
+                            .transpose()?
+                            .filter(|s| !s.is_empty())
+                            .unwrap_or_else(|| default_units.to_owned()),
+                        None => default_units.to_owned(),
+                    };
+                    let pos_str = match v_dict {
+                        Some(d) => d
+                            .get_item("positive")?
+                            .map(|v| v.extract::<String>())
+                            .transpose()?
+                            .unwrap_or_else(|| "up".to_owned()),
+                        None => "up".to_owned(),
+                    };
+                    Some(VerticalCoordinate {
+                        kind: vertical_kind(&kind_str)?,
+                        units,
+                        positive: vertical_direction(&pos_str)?,
+                    })
+                }
+                _ => None,
+            };
+
+            let lon_conv = match axis {
+                CoordinateAxis::Longitude => {
+                    let lc_str = cdict
+                        .get_item("longitude_convention")?
+                        .map(|v| v.extract::<String>())
+                        .transpose()?
+                        .unwrap_or_else(|| "minus180_to_180".to_owned());
+                    Some(longitude_convention(&lc_str)?)
+                }
+                _ => None,
+            };
+
+            dataset.coordinates.push(Coordinate {
+                name: cname,
+                variable: variable_path,
+                axis,
+                time: time_coord,
+                vertical: vertical_coord,
+                longitude_convention: lon_conv,
+            });
+        }
     }
 
     dataset.validate().map_err(format_error)?;

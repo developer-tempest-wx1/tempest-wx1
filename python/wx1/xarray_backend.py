@@ -42,11 +42,33 @@ from . import open_file
 class Wx1BackendArray(BackendArray):
     """BackendArray that requests only the chunks intersecting each selection."""
 
-    def __init__(self, file, variable):
+    def __init__(
+        self,
+        file,
+        variable,
+        *,
+        decode_dtype=None,
+        cf_units: str | None = None,
+        cf_calendar: str | None = None,
+    ):
         self._file = file
         self._path = variable["path"]
         self.shape = tuple(int(value) for value in variable["shape"])
-        self.dtype = np.dtype(variable["numpy_dtype"])
+        self._raw_dtype = np.dtype(variable["numpy_dtype"])
+        self._decode_dtype = np.dtype(decode_dtype) if decode_dtype is not None else None
+        self._cf_units = cf_units
+        self._cf_calendar = cf_calendar
+        if self._decode_dtype is not None:
+            self.dtype = self._decode_dtype
+        elif self._cf_units is not None:
+            probe = xr.coding.times.decode_cf_datetime(
+                np.zeros((1,), dtype=self._raw_dtype),
+                units=self._cf_units,
+                calendar=self._cf_calendar or "standard",
+            )
+            self.dtype = np.asarray(probe).dtype
+        else:
+            self.dtype = self._raw_dtype
 
     def __getitem__(self, key):
         return explicit_indexing_adapter(
@@ -93,7 +115,19 @@ class Wx1BackendArray(BackendArray):
             post_index.append(slice(local_start, local_stop, local_step))
 
         array = self._file.read_array_slice(self._path, starts, counts)
-        return array[tuple(post_index)]
+        selected = array[tuple(post_index)]
+        if self._decode_dtype is not None:
+            if self._decode_dtype.kind in ("M", "m"):
+                return np.asarray(selected, dtype=np.int64).view(self._decode_dtype)
+            return np.asarray(selected, dtype=self._decode_dtype)
+        if self._cf_units is not None:
+            decoded = xr.coding.times.decode_cf_datetime(
+                np.asarray(selected),
+                units=self._cf_units,
+                calendar=self._cf_calendar or "standard",
+            )
+            return np.asarray(decoded, dtype=self.dtype)
+        return selected
 
 
 # ==============================================================================
@@ -106,11 +140,14 @@ class Wx1BackendEntrypoint(BackendEntrypoint):
     """xarray entrypoint registered as ``engine='wx1'``."""
 
     description = "Experimental WX-1 scientific container backend"
+
     def open_dataset(
         self,
         filename_or_obj: str | Path,
         *,
         drop_variables: str | Iterable[str] | None = None,
+        decode_times: bool = True,
+        decode_timedelta: bool = True,
     ) -> xr.Dataset:
         if isinstance(drop_variables, str):
             drop_variables = {drop_variables}
@@ -132,23 +169,75 @@ class Wx1BackendEntrypoint(BackendEntrypoint):
                 dtype = dtype.newbyteorder("<" if item["byte_order"] == "little" else ">")
             item_for_backend = dict(item)
             item_for_backend["numpy_dtype"] = dtype.str
-            backend_array = Wx1BackendArray(file, item_for_backend)
+
+            v_attrs = dict(item["attributes"])
+            v_encoding = {}
+            logical_dtype = str(v_attrs.get("wx1:logical_dtype", ""))
+            decode_dtype = None
+            cf_units = None
+            cf_calendar = None
+
+            if decode_times and item["dtype"] == "int64" and logical_dtype.startswith("datetime64["):
+                decode_dtype = np.dtype(logical_dtype)
+                for k in ("units", "calendar", "wx1:logical_dtype"):
+                    if k in v_attrs:
+                        v_encoding[k] = v_attrs.pop(k)
+            elif decode_timedelta and item["dtype"] == "int64" and logical_dtype.startswith("timedelta64["):
+                decode_dtype = np.dtype(logical_dtype)
+                for k in ("units", "wx1:logical_dtype"):
+                    if k in v_attrs:
+                        v_encoding[k] = v_attrs.pop(k)
+            elif decode_times and isinstance(v_attrs.get("units"), str) and " since " in v_attrs["units"]:
+                cf_units = v_attrs.pop("units")
+                cf_calendar = v_attrs.pop("calendar", "standard")
+                v_encoding["units"] = cf_units
+                v_encoding["calendar"] = cf_calendar
+
+            backend_array = Wx1BackendArray(
+                file,
+                item_for_backend,
+                decode_dtype=decode_dtype,
+                cf_units=cf_units,
+                cf_calendar=cf_calendar,
+            )
             lazy_data = LazilyIndexedArray(backend_array)
             var_obj = xr.Variable(
                 tuple(item["dimensions"]),
                 lazy_data,
-                attrs=dict(item["attributes"]),
+                attrs=v_attrs,
+                encoding=v_encoding,
             )
             clean_name = item.get("name") or variable_path.lstrip("/")
             if drop_variables and clean_name in drop_variables:
                 continue
             variables[clean_name or variable_path] = var_obj
 
+        if hasattr(file, "_native") and hasattr(file._native, "attributes"):
+            raw_global = {
+                str(k): str(v)
+                for k, v in dict(file._native.attributes()).items()
+                if not str(k).startswith("wx1:__")
+            }
+        else:
+            raw_global = dict(file.attributes)
+
         dataset = xr.Dataset(
             data_vars=variables,
-            attrs={"wx1_dataset_id": file.dataset_id, "wx1_generation": file.generation, **file.attributes},
+            attrs={"wx1_dataset_id": file.dataset_id, "wx1_generation": file.generation, **raw_global},
         )
-        coordinate_paths = [path for path in file.coordinate_variables if path in dataset.variables]
+        raw_coord_vars = tuple(file.coordinate_variables)
+        if raw_coord_vars:
+            coord_names_set = {p.lstrip("/") for p in raw_coord_vars}
+            coordinate_paths = [
+                name for name in dataset.variables
+                if name in coord_names_set or name in raw_coord_vars
+            ]
+        else:
+            # Backwards-compatible heuristic for legacy v0.1.7 containers without Coordinate records
+            coordinate_paths = [
+                name for name, var in dataset.variables.items()
+                if var.ndim == 1 and var.dims[0] == name
+            ]
         if coordinate_paths:
             dataset = dataset.set_coords(coordinate_paths)
         dataset.set_close(file.close)

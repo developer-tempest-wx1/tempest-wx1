@@ -321,4 +321,193 @@ def test_adr0026_python_cubed_sphere_halos_and_tile_read(tmp_path):
         np.testing.assert_array_equal(tile2_full[0], source[2])
 
 
+def test_write_dataset_no_variable_attribute_leak_to_global_attrs(tmp_path):
+    xr = pytest.importorskip("xarray")
+    path = tmp_path / "no_attr_leak.wx1"
+    data = np.linspace(270.0, 290.0, 6, dtype=np.float32).reshape(2, 3)
+    ds = xr.Dataset(
+        data_vars={
+            "t2m": (("y", "x"), data, {"units": "K", "long_name": "2m temperature"}),
+            "msl": (("y", "x"), data * 350.0, {"units": "Pa", "long_name": "Mean sea level pressure"}),
+        },
+        coords={
+            "y": ("y", np.array([50.0, 52.0], dtype=np.float32), {"units": "degrees_north"}),
+            "x": ("x", np.array([4.0, 5.0, 6.0], dtype=np.float32), {"units": "degrees_east"}),
+        },
+        attrs={"title": "Clean Global Metadata"},
+    )
+    wx1.write_dataset(path, ds, dataset_id="no-leak-test", codec="zstd_shuffle", workers=1)
+
+    with wx1.open_file(path) as f:
+        assert f.attributes["title"] == "Clean Global Metadata"
+        assert "units" not in f.attributes
+        assert "long_name" not in f.attributes
+
+    with wx1.open_dataset(path) as reopened:
+        assert reopened.attrs["title"] == "Clean Global Metadata"
+        assert "units" not in reopened.attrs
+        assert "long_name" not in reopened.attrs
+        assert reopened["t2m"].attrs["units"] == "K"
+        assert reopened["msl"].attrs["units"] == "Pa"
+
+    # Also verify no leak even when global attributes are empty
+    path_empty = tmp_path / "no_attr_leak_empty.wx1"
+    ds_no_global = ds.copy()
+    ds_no_global.attrs = {}
+    wx1.write_dataset(path_empty, ds_no_global, dataset_id="no-leak-empty", workers=1)
+    with wx1.open_dataset(path_empty) as reopened_empty:
+        assert "units" not in reopened_empty.attrs
+        assert "long_name" not in reopened_empty.attrs
+
+
+def test_write_dataset_preserves_dimension_and_nondim_coordinates(tmp_path):
+    xr = pytest.importorskip("xarray")
+    path = tmp_path / "coords_roundtrip.wx1"
+    ny, nx = 3, 4
+    y_m = np.array([0.0, 1500.0, 3000.0], dtype=np.float64)
+    x_m = np.array([0.0, 1500.0, 3000.0, 4500.0], dtype=np.float64)
+    lat2d = np.linspace(51.0, 51.03, ny * nx, dtype=np.float64).reshape(ny, nx)
+    lon2d = np.linspace(5.0, 5.06, ny * nx, dtype=np.float64).reshape(ny, nx)
+    lead_hours = np.array([0, 3], dtype=np.int32)
+    t_vals = np.array(["2026-11-21T00:00:00", "2026-11-21T03:00:00"], dtype="datetime64[s]")
+    field = np.arange(2 * ny * nx, dtype=np.float32).reshape(2, ny, nx)
+
+    ds = xr.Dataset(
+        data_vars={"t2m": (("time", "y", "x"), field, {"units": "K"})},
+        coords={
+            "time": ("time", t_vals),
+            "y": ("y", y_m, {"units": "m"}),
+            "x": ("x", x_m, {"units": "m"}),
+            "lead_hours": ("time", lead_hours, {"units": "hour"}),
+            "lat2d": (("y", "x"), lat2d, {"units": "degrees_north", "standard_name": "latitude"}),
+            "lon2d": (("y", "x"), lon2d, {"units": "degrees_east", "standard_name": "longitude"}),
+        },
+    )
+    wx1.write_dataset(path, ds, dataset_id="coords-rt", codec="zstd_shuffle", workers=1)
+
+    with wx1.open_file(path) as f:
+        coord_vars = set(f.coordinate_variables)
+        assert {"/time", "/y", "/x", "/lead_hours", "/lat2d", "/lon2d"}.issubset(coord_vars)
+        coord_meta = {c["name"]: c for c in f.coordinates}
+        assert coord_meta["time"]["axis"] == "time"
+        assert coord_meta["lat2d"]["axis"] == "latitude"
+        assert coord_meta["lon2d"]["axis"] == "longitude"
+        assert coord_meta["lon2d"]["longitude_convention"] == "minus180_to_180"
+
+    with wx1.open_dataset(path) as reopened:
+        for cname in ("time", "y", "x", "lead_hours", "lat2d", "lon2d"):
+            assert cname in reopened.coords
+        assert "t2m" in reopened.data_vars
+        np.testing.assert_array_equal(reopened.coords["lead_hours"].values, lead_hours)
+        np.testing.assert_allclose(reopened.coords["lat2d"].values, lat2d)
+        np.testing.assert_array_equal(reopened["t2m"].values, field)
+
+
+def test_cf_datetime64_and_timedelta64_roundtrip_and_raw_bit_exact(tmp_path):
+    xr = pytest.importorskip("xarray")
+    path = tmp_path / "temporal_cf.wx1"
+    times_s = np.array(
+        ["2026-11-21T00:00:00", "2026-11-21T06:00:00", "2026-11-21T12:00:00"],
+        dtype="datetime64[s]",
+    )
+    times_ns = np.array(
+        ["2026-11-21T00:00:00.123456789", "2026-11-21T01:00:00.000000000"],
+        dtype="datetime64[ns]",
+    )
+    steps_h = np.array([0, 6, 12], dtype="timedelta64[h]")
+    t2m = np.linspace(275.0, 285.0, 6, dtype=np.float32).reshape(3, 2)
+
+    ds = xr.Dataset(
+        data_vars={"t2m": (("time", "member"), t2m, {"units": "K"})},
+        coords={
+            "time": ("time", times_s),
+            "step": ("time", steps_h),
+            "precise_time": ("member", times_ns),
+        },
+    )
+    wx1.write_dataset(path, ds, dataset_id="temporal-cf", workers=1)
+
+    # 1. Native reader sees bit-exact int64 (note xarray normalizes some units on Dataset creation)
+    expected_step_raw = ds["step"].values.view("int64")
+    expected_step_dtype = ds["step"].values.dtype
+    with wx1.open_file(path) as f:
+        raw_t = f.read_array("/time")
+        assert raw_t.dtype == np.dtype("int64")
+        np.testing.assert_array_equal(raw_t, times_s.view("int64"))
+        raw_step = f.read_array("/step")
+        assert raw_step.dtype == np.dtype("int64")
+        np.testing.assert_array_equal(raw_step, expected_step_raw)
+
+    # 2. xarray default (decode_times=True, decode_timedelta=True)
+    with wx1.open_dataset(path) as decoded:
+        assert decoded["time"].dtype == np.dtype("datetime64[s]")
+        np.testing.assert_array_equal(decoded["time"].values, times_s)
+        assert decoded["precise_time"].dtype == np.dtype("datetime64[ns]")
+        np.testing.assert_array_equal(decoded["precise_time"].values, times_ns)
+        assert decoded["step"].dtype == expected_step_dtype
+        np.testing.assert_array_equal(decoded["step"].values, ds["step"].values)
+
+    # 3. xarray raw mode (decode_times=False, decode_timedelta=False)
+    with wx1.open_dataset(path, decode_times=False, decode_timedelta=False) as raw_ds:
+        assert raw_ds["time"].dtype == np.dtype("int64")
+        assert raw_ds["time"].attrs["units"] == "seconds since 1970-01-01 00:00:00"
+        assert raw_ds["time"].attrs["calendar"] == "proleptic_gregorian"
+        np.testing.assert_array_equal(raw_ds["time"].values, times_s.view("int64"))
+        assert raw_ds["step"].dtype == np.dtype("int64")
+        np.testing.assert_array_equal(raw_ds["step"].values, expected_step_raw)
+
+    # 4. Direct dict write preserves raw timedelta64[h] unit ([0, 6, 12]) without xarray normalization
+    path_hours = tmp_path / "temporal_hours_dict.wx1"
+    wx1.write_dataset(
+        path_hours,
+        {"step": steps_h, "val": np.ones(3, dtype=np.float32)},
+        dataset_id="hours-dict",
+        dimensions={"step": ("step",), "val": ("step",)},
+        coordinates=["step"],
+        workers=1,
+    )
+    with wx1.open_file(path_hours) as fh:
+        raw_h = fh.read_array("/step")
+        assert raw_h.dtype == np.dtype("int64")
+        np.testing.assert_array_equal(raw_h, steps_h.view("int64"))
+    with wx1.open_dataset(path_hours) as ds_h:
+        assert ds_h["step"].dtype == np.dtype("timedelta64[h]")
+        np.testing.assert_array_equal(ds_h["step"].values, steps_h)
+
+
+def test_open_mfdataset_across_multiple_wx1_files_with_dask(tmp_path):
+    xr = pytest.importorskip("xarray")
+    pytest.importorskip("dask.array")
+    files = []
+    lat = np.array([50.0, 52.0], dtype=np.float32)
+    lon = np.array([4.0, 6.0], dtype=np.float32)
+    for idx in range(3):
+        p = tmp_path / f"lead_{idx:03d}.wx1"
+        t_arr = np.array([f"2026-11-21T{idx:02d}:00:00"], dtype="datetime64[s]")
+        field = np.full((1, 2, 2), 280.0 + idx, dtype=np.float32)
+        ds = xr.Dataset(
+            data_vars={"t2m": (("time", "lat", "lon"), field, {"units": "K"})},
+            coords={"time": ("time", t_arr), "lat": ("lat", lat), "lon": ("lon", lon)},
+        )
+        wx1.write_dataset(p, ds, dataset_id=f"mf-{idx}", workers=1)
+        files.append(p)
+
+    combined = xr.open_mfdataset(
+        files,
+        engine="wx1",
+        combine="nested",
+        concat_dim="time",
+        chunks={"time": 1},
+    )
+    try:
+        assert combined["t2m"].shape == (3, 2, 2)
+        assert "time" in combined.coords
+        assert combined["time"].dtype == np.dtype("datetime64[s]")
+        np.testing.assert_allclose(
+            combined["t2m"].mean(dim=("lat", "lon")).compute().values,
+            np.array([280.0, 281.0, 282.0], dtype=np.float32),
+        )
+    finally:
+        combined.close()
+
 
